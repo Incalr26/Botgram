@@ -1,0 +1,5 @@
+<resources>
+    <style name="NavItemShape" parent="ShapeAppearance.Material3.Corner.None">
+        <!-- 完全无圆角 -->
+    </style>
+</resources>

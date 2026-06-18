@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center"
+    android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingTop="?android:attr/actionBarSize"
     android:paddingBottom="32dp"
@@ -11,7 +11,8 @@
 
     <FrameLayout
         android:layout_width="72dp"
-        android:layout_height="72dp">
+        android:layout_height="72dp"
+        android:layout_marginTop="16dp">
 
         <ImageView
             android:id="@+id/botAvatar"

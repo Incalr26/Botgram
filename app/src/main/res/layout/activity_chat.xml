@@ -52,7 +52,7 @@
             android:src="@android:drawable/ic_menu_send"
             android:contentDescription="发送"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorSecondary"
+            android:tint="?attr/colorPrimary"
             android:scaleType="center" />
     </LinearLayout>
 </LinearLayout>

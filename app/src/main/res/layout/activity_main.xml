@@ -50,6 +50,6 @@
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/navigation_menu"
         app:itemBackground="?attr/selectableItemBackground"
-        app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.None"
-        app:itemShapeAppearance="@style/ShapeAppearance.Material3.Corner.None" />
+        app:shapeAppearance="@style/NavItemShape"
+        app:itemShapeAppearance="@style/NavItemShape" />
 </androidx.drawerlayout.widget.DrawerLayout>

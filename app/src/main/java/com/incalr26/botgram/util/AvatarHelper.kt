@@ -91,7 +91,9 @@ object AvatarHelper {
     }
 
     /**
-     * 加载头像，回调保证在主线程执行。
+     * 加载头像。
+     * - 若数据库有缓存 URL，直接加载，成功显示真实头像，失败保持原样（网络错误不改变）。
+     * - 若无缓存，请求 API：成功则缓存并显示，无头像则显示首字符，网络错误保持原样。
      */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
@@ -104,20 +106,22 @@ object AvatarHelper {
     ) {
         val context = imageView.context
         val repo = ChatRepository(BotApp.instance.databaseHelper)
-
-        // 1. 先从数据库缓存获取
         val chat = repo.getChatById(chatId)
         val cachedUrl = chat?.avatarUrl
 
-        if (cachedUrl == "none") {
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
-            return
-        } else if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
+        if (cachedUrl != null && cachedUrl.isNotEmpty()) {
+            // 有缓存，尝试加载
+            loadUrl(context, imageView, cachedUrl,
+                onSuccess = { onHasAvatar?.invoke() },
+                onError = {
+                    // 加载失败（网络问题），不改变显示，仍触发 onNetworkError 让 UI 保持
+                    Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
+                }
+            )
             return
         }
 
-        // 2. 没有缓存，请求 API
+        // 无缓存，请求 API
         val url: String? = when (type) {
             "private" -> if (userId != null) getUserProfilePhotos(userId) else null
             "group", "supergroup" -> getGroupAvatarUrl(chatId)
@@ -125,10 +129,17 @@ object AvatarHelper {
         }
 
         if (url != null) {
+            // 成功获取到头像 URL，缓存并加载
             repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url, onHasAvatar, onNetworkError)
+            loadUrl(context, imageView, url,
+                onSuccess = { onHasAvatar?.invoke() },
+                onError = {
+                    Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
+                }
+            )
         } else {
-            Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
+            // 无头像
+            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
         }
     }
 

@@ -105,6 +105,23 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun loadTitleAndType() {
         val chat = chatRepository.getChatById(chatId)
+        // 尝试获取 member_count
+        var memberCount: Int? = null
+        try {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+                .getString("bot_token", "") ?: ""
+            val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
+            val request = Request.Builder().url(url).build()
+            val response = ApiClient.getClient().newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = JSONObject(response.body?.string() ?: "")
+                if (json.getBoolean("ok")) {
+                    val chatObj = json.getJSONObject("result")
+                    memberCount = if (chatObj.has("member_count")) chatObj.getInt("member_count") else null
+                }
+            }
+        } catch (_: Exception) {}
+
         withContext(Dispatchers.Main) {
             if (chat != null) {
                 val name = if (chat.type == "private") {
@@ -120,7 +137,8 @@ class ChatActivity : AppCompatActivity() {
                     "channel" -> "频道"
                     else -> chat.type
                 }
-                supportActionBar?.subtitle = typeStr
+                val memberStr = if (memberCount != null) " · ${memberCount}人" else ""
+                supportActionBar?.subtitle = typeStr + memberStr
             }
         }
     }
