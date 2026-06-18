@@ -1,10 +1,14 @@
 package com.incalr26.botgram.ui.main
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -16,6 +20,12 @@ import com.incalr26.botgram.data.repository.ChatRepository
 class ChatListFragment : Fragment() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var adapter: ChatAdapter
+
+    private val newMsgReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            chatRepository.refreshChats()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -43,5 +53,20 @@ class ChatListFragment : Fragment() {
             emptyHint.visibility = if (chats.isEmpty()) View.VISIBLE else View.GONE
         })
         chatRepository.refreshChats()
+
+        // 注册广播
+        ContextCompat.registerReceiver(
+            requireContext(),
+            newMsgReceiver,
+            IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        try {
+            requireContext().unregisterReceiver(newMsgReceiver)
+        } catch (_: Exception) {}
     }
 }

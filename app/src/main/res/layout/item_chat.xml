@@ -6,15 +6,12 @@
     android:padding="12dp"
     android:background="?attr/colorSurface">
 
-    <TextView
-        android:id="@+id/avatarText"
+    <ImageView
+        android:id="@+id/avatarImage"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:background="@drawable/avatar_bg"
-        android:gravity="center"
-        android:textColor="?attr/colorOnPrimary"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:scaleType="centerCrop"
+        android:contentDescription="头像" />
 
     <LinearLayout
         android:layout_width="0dp"

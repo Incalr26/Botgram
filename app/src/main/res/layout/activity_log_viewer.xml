@@ -15,7 +15,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="清空日志" />
+            android:text="清空" />
 
         <Button
             android:id="@+id/refreshLogButton"
@@ -23,6 +23,20 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="刷新" />
+
+        <Button
+            android:id="@+id/exportLogButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="导出" />
+
+        <Button
+            android:id="@+id/sendEmailButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="发送邮箱" />
     </LinearLayout>
 
     <ScrollView

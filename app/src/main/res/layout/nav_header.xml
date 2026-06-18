@@ -8,15 +8,12 @@
     android:paddingBottom="32dp"
     android:background="?attr/colorSurface">
 
-    <TextView
+    <ImageView
         android:id="@+id/botAvatar"
         android:layout_width="72dp"
         android:layout_height="72dp"
-        android:background="@drawable/avatar_bg"
-        android:gravity="center"
-        android:textColor="?attr/colorOnPrimary"
-        android:textSize="28sp"
-        android:textStyle="bold" />
+        android:scaleType="centerCrop"
+        android:contentDescription="Bot头像" />
 
     <TextView
         android:id="@+id/botName"

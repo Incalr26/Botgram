@@ -5,18 +5,12 @@
     android:orientation="horizontal"
     android:padding="8dp">
 
-    <!-- 发送者头像（收到消息时左侧） -->
-    <TextView
+    <ImageView
         android:id="@+id/avatar"
         android:layout_width="40dp"
         android:layout_height="40dp"
-        android:background="@drawable/avatar_bg"
-        android:gravity="center"
-        android:text="U"
-        android:textColor="@android:color/white"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:visibility="visible" />
+        android:scaleType="centerCrop"
+        android:contentDescription="头像" />
 
     <LinearLayout
         android:layout_width="0dp"

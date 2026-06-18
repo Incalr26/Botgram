@@ -9,14 +9,17 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
 import com.google.android.material.navigation.NavigationView
+import com.incalr26.botgram.BuildConfig
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.ui.login.LoginActivity
+import com.incalr26.botgram.util.AvatarHelper
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -45,7 +48,8 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
 
-        // 点击导航按钮直接打开抽屉
+        navigationView.menu.findItem(R.id.nav_version)?.title = "版本 ${BuildConfig.VERSION_NAME}"
+
         toolbar.setNavigationOnClickListener {
             if (drawerLayout.isDrawerOpen(Gravity.LEFT)) {
                 drawerLayout.closeDrawer(Gravity.LEFT)
@@ -54,7 +58,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 自定义全局右滑检测
         contentLayout.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -64,7 +67,7 @@ class MainActivity : AppCompatActivity() {
                 MotionEvent.ACTION_MOVE -> {
                     if (!drawerLayout.isDrawerOpen(Gravity.LEFT)) {
                         val dx = event.x - downX
-                        if (dx > 80) { // 右滑超过阈值
+                        if (dx > 80) {
                             drawerLayout.openDrawer(Gravity.LEFT)
                             return@setOnTouchListener true
                         }
@@ -117,6 +120,7 @@ class MainActivity : AppCompatActivity() {
                     val json = JSONObject(response.body?.string() ?: "")
                     if (json.getBoolean("ok")) {
                         val bot = json.getJSONObject("result")
+                        val botId = bot.getLong("id")
                         val firstName = bot.optString("first_name", "Bot")
                         val username = bot.optString("username", null)
                         withContext(Dispatchers.Main) {
@@ -124,8 +128,9 @@ class MainActivity : AppCompatActivity() {
                             headerView.findViewById<TextView>(R.id.botName).text = firstName
                             headerView.findViewById<TextView>(R.id.botUsername).text =
                                 if (username != null) "@$username" else "无用户名"
-                            headerView.findViewById<TextView>(R.id.botAvatar).text =
-                                firstName.take(1).uppercase()
+
+                            val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
+                            AvatarHelper.loadInto(avatarView, botId, botId, "private")
                         }
                     }
                 }

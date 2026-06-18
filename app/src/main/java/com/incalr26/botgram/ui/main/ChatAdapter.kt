@@ -3,18 +3,23 @@ package com.incalr26.botgram.ui.main
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.ChatEntity
+import com.incalr26.botgram.util.AvatarHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
     ListAdapter<ChatEntity, ChatAdapter.ViewHolder>(DiffCallback()) {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val avatarText: TextView = view.findViewById(R.id.avatarText)
+        val avatarImage: ImageView = view.findViewById(R.id.avatarImage)
         val chatName: TextView = view.findViewById(R.id.chatName)
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
         val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
@@ -35,9 +40,11 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             chat.title ?: "未命名群组"
         }
         holder.chatName.text = name
-        // 头像显示首字母，若名为空则显示"?"
-        val initial = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        holder.avatarText.text = initial
+
+        val userId: Long? = if (chat.type == "private") chat.chatId else null
+        CoroutineScope(Dispatchers.Main).launch {
+            AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
+        }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
 
