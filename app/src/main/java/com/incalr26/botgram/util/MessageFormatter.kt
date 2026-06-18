@@ -43,6 +43,14 @@ object MessageFormatter {
                     }
                     "mention" -> spannable.setSpan(UnderlineSpan(), offset, end, 0)
                     "text_mention" -> spannable.setSpan(StyleSpan(android.graphics.Typeface.BOLD), offset, end, 0)
+                    "blockquote" -> {
+                        spannable.setSpan(QuoteSpan(0x33666666), offset, end, 0)
+                        spannable.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), offset, end, 0)
+                    }
+                    "expandable_blockquote" -> {
+                        spannable.setSpan(QuoteSpan(0x33666666), offset, end, 0)
+                    }
+                    // 其他类型可忽略
                 }
             }
         } catch (_: Exception) {}

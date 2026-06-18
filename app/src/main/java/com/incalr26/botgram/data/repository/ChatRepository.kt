@@ -70,6 +70,16 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
         refreshChats()
     }
 
+    suspend fun updateLastMessage(chatId: Long, message: String, time: Long) = withContext(Dispatchers.IO) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply {
+            put(DatabaseHelper.COL_LAST_MESSAGE, message)
+            put(DatabaseHelper.COL_LAST_TIME, time)
+        }
+        db.update(DatabaseHelper.TABLE_CHATS, values, "${DatabaseHelper.COL_CHAT_ID} = ?", arrayOf(chatId.toString()))
+        refreshChats()
+    }
+
     suspend fun updateAvatarUrl(chatId: Long, avatarUrl: String) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
         val values = ContentValues().apply { put(DatabaseHelper.COL_AVATAR_URL, avatarUrl) }

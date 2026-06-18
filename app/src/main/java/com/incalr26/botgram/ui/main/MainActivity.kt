@@ -130,7 +130,28 @@ class MainActivity : AppCompatActivity() {
                                 if (username != null) "@$username" else "无用户名"
 
                             val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
-                            AvatarHelper.loadInto(avatarView, botId, botId, "private")
+                            val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
+                            val fallback = firstName.take(1).uppercase()
+                            fallbackView.text = fallback
+                            fallbackView.visibility = View.VISIBLE
+                            avatarView.visibility = View.GONE
+
+                            // 加载头像
+                            try {
+                                AvatarHelper.loadInto(avatarView, botId, botId, "private")
+                                avatarView.post {
+                                    if (avatarView.drawable == null) {
+                                        fallbackView.visibility = View.VISIBLE
+                                        avatarView.visibility = View.GONE
+                                    } else {
+                                        fallbackView.visibility = View.GONE
+                                        avatarView.visibility = View.VISIBLE
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                fallbackView.visibility = View.VISIBLE
+                                avatarView.visibility = View.GONE
+                            }
                         }
                     }
                 }

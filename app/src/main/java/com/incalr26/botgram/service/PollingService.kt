@@ -16,7 +16,6 @@ import com.incalr26.botgram.data.repository.MessageRepository
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
-import org.json.JSONArray
 
 class PollingService : Service() {
 
@@ -85,8 +84,15 @@ class PollingService : Service() {
         val chatFirstName = chatObj.optString("first_name", null)
         val chatLastName = chatObj.optString("last_name", null)
         val chatUsername = chatObj.optString("username", null)
+        val date = msg.getLong("date") * 1000
 
-        val lastMessageText = extractText(msg)
+        // 处理系统消息或普通文本
+        val messageText = extractMessageText(msg)
+        val entitiesJson = if (msg.has("entities")) {
+            msg.getJSONArray("entities").toString()
+        } else null
+
+        // 更新会话
         chatRepository.insertOrUpdateChat(
             ChatEntity(
                 chatId = chatId,
@@ -95,22 +101,17 @@ class PollingService : Service() {
                 firstName = chatFirstName,
                 lastName = chatLastName,
                 username = chatUsername,
-                lastMessage = lastMessageText,
-                lastTime = msg.getLong("date") * 1000,
+                lastMessage = messageText,
+                lastTime = date,
                 unreadCount = 1
             )
         )
 
-        val messageId = msg.getLong("message_id")
+        // 获取发送者信息
         val from = msg.optJSONObject("from")
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
-        val text = msg.optString("text", null)
-
-        // 提取 entities JSON 字符串
-        val entitiesJson = if (msg.has("entities")) {
-            msg.getJSONArray("entities").toString()
-        } else null
+        val messageId = msg.getLong("message_id")
 
         messageRepository.insertMessage(
             MessageEntity(
@@ -118,7 +119,7 @@ class PollingService : Service() {
                 chatId = chatId,
                 senderUserId = senderId,
                 senderName = senderName,
-                text = text,
+                text = messageText,
                 date = msg.getLong("date"),
                 isOutgoing = false,
                 rawJson = msg.toString(),
@@ -132,12 +133,44 @@ class PollingService : Service() {
         sendBroadcast(refreshIntent)
     }
 
-    private fun extractText(msg: JSONObject): String? {
-        return msg.optString("text", null)
-            ?: msg.optJSONObject("photo")?.let { "[图片]" }
-            ?: msg.optJSONObject("sticker")?.let { "[贴纸]" }
-            ?: msg.optJSONObject("document")?.let { "[文件]" }
-            ?: "[媒体消息]"
+    private fun extractMessageText(msg: JSONObject): String? {
+        // 系统消息类型
+        if (msg.has("new_chat_members")) {
+            val members = msg.getJSONArray("new_chat_members")
+            val names = mutableListOf<String>()
+            for (i in 0 until members.length()) {
+                val user = members.getJSONObject(i)
+                names.add(user.optString("first_name", "用户"))
+            }
+            return names.joinToString(", ") + " 加入了群组"
+        }
+        if (msg.has("left_chat_member")) {
+            val user = msg.getJSONObject("left_chat_member")
+            val name = user.optString("first_name", "用户")
+            return "$name 离开了群组"
+        }
+        if (msg.has("group_chat_created")) {
+            return "群组已创建"
+        }
+        if (msg.has("new_chat_title")) {
+            return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
+        }
+
+        // 普通文本
+        if (msg.has("text")) return msg.getString("text")
+
+        // 贴纸、图片等媒体
+        if (msg.has("sticker")) {
+            val sticker = msg.getJSONObject("sticker")
+            val emoji = sticker.optString("emoji", "")
+            return if (emoji.isNotEmpty()) "贴纸 $emoji" else "贴纸"
+        }
+        if (msg.has("photo")) return "[图片]"
+        if (msg.has("document")) return "[文件]"
+        if (msg.has("video")) return "[视频]"
+        if (msg.has("audio") || msg.has("voice")) return "[语音]"
+
+        return "[媒体消息]"
     }
 
     private fun createNotification(): Notification {

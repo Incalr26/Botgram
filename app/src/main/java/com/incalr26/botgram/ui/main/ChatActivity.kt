@@ -6,8 +6,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.view.MenuItem
-import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -75,7 +75,7 @@ class ChatActivity : AppCompatActivity() {
             }
 
             val messageInput = findViewById<EditText>(R.id.messageInput)
-            val sendButton = findViewById<Button>(R.id.sendButton)
+            val sendButton = findViewById<ImageButton>(R.id.sendButton)
 
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
@@ -191,6 +191,8 @@ class ChatActivity : AppCompatActivity() {
                     rawJson = result.toString()
                 )
                 messageRepository.insertMessage(messageEntity)
+                // 更新最后消息
+                chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)
                 loadMessagesInternal()
             }
         }

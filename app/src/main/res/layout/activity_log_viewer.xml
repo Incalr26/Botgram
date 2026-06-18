@@ -12,34 +12,38 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/clearLogButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="?attr/colorOnSurface"
             android:text="清空" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/refreshLogButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="?attr/colorOnSurface"
             android:text="刷新" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/exportLogButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="?attr/colorOnSurface"
             android:text="导出" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/sendEmailButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="?attr/colorOnSurface"
             android:text="发送给开发者" />
     </LinearLayout>
 

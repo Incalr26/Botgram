@@ -20,6 +20,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatarImage: ImageView = view.findViewById(R.id.avatarImage)
+        val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val chatName: TextView = view.findViewById(R.id.chatName)
         val chatTypeLabel: TextView = view.findViewById(R.id.chatTypeLabel)
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
@@ -41,8 +42,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             chat.title ?: "未命名群组"
         }
         holder.chatName.text = name
-
-        // 显示聊天类型
         holder.chatTypeLabel.text = when (chat.type) {
             "private" -> "私聊"
             "group" -> "群组"
@@ -51,9 +50,31 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
+        // 设置首字母回退
+        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        holder.avatarFallback.text = fallback
+        holder.avatarFallback.visibility = View.VISIBLE
+        holder.avatarImage.visibility = View.GONE
+
         val userId: Long? = if (chat.type == "private") chat.chatId else null
         CoroutineScope(Dispatchers.Main).launch {
-            AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
+            try {
+                // 加载成功会覆盖，失败保持 fallback 可见
+                AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
+                // 如果 loadInto 完成后图片仍为 null（无网络等），可手动显示 fallback
+                holder.avatarImage.post {
+                    if (holder.avatarImage.drawable == null) {
+                        holder.avatarFallback.visibility = View.VISIBLE
+                        holder.avatarImage.visibility = View.GONE
+                    } else {
+                        holder.avatarFallback.visibility = View.GONE
+                        holder.avatarImage.visibility = View.VISIBLE
+                    }
+                }
+            } catch (e: Exception) {
+                holder.avatarFallback.visibility = View.VISIBLE
+                holder.avatarImage.visibility = View.GONE
+            }
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
