@@ -2,10 +2,8 @@ package com.incalr26.botgram.data.remote
 
 import android.app.Application
 import com.incalr26.botgram.util.LogManager
-import com.incalr26.botgram.util.NetworkStateHolder
 import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -22,16 +20,6 @@ object ApiClient {
 
         client = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            .addInterceptor { chain ->
-                try {
-                    val response = chain.proceed(chain.request())
-                    NetworkStateHolder.updateState(true)
-                    response
-                } catch (e: IOException) {
-                    NetworkStateHolder.updateState(false)
-                    throw e
-                }
-            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()

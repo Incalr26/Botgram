@@ -50,6 +50,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
+        // 初始显示首字符，隐藏图片
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -59,13 +60,17 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         CoroutineScope(Dispatchers.Main).launch {
             AvatarHelper.loadInto(
                 holder.avatarImage, userId, chat.chatId, chat.type,
-                onSuccess = {
+                onHasAvatar = {
                     holder.avatarFallback.visibility = View.GONE
                     holder.avatarImage.visibility = View.VISIBLE
                 },
-                onError = {
+                onNoAvatar = {
+                    // 保持首字符，隐藏图像
                     holder.avatarFallback.visibility = View.VISIBLE
                     holder.avatarImage.visibility = View.GONE
+                },
+                onNetworkError = {
+                    // 网络错误，保持当前显示不变
                 }
             )
         }

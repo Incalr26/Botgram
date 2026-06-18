@@ -4,9 +4,10 @@
     android:layout_height="wrap_content"
     android:gravity="center"
     android:orientation="vertical"
-    android:paddingTop="64dp"
+    android:paddingTop="?android:attr/actionBarSize"
     android:paddingBottom="32dp"
-    android:background="?attr/colorSurface">
+    android:background="?attr/colorSurface"
+    android:fitsSystemWindows="true">
 
     <FrameLayout
         android:layout_width="72dp"

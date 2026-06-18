@@ -49,5 +49,7 @@
         android:fitsSystemWindows="true"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/navigation_menu"
-        app:itemBackground="@drawable/nav_item_bg" />
+        app:itemBackground="?attr/selectableItemBackground"
+        app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.None"
+        app:itemShapeAppearance="@style/ShapeAppearance.Material3.Corner.None" />
 </androidx.drawerlayout.widget.DrawerLayout>

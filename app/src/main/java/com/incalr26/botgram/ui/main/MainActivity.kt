@@ -1,10 +1,6 @@
 package com.incalr26.botgram.ui.main
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.net.ConnectivityManager
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
@@ -108,7 +104,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // 监听网络状态 LiveData
+        // 监听网络状态
         NetworkStateHolder.isConnected.observe(this, Observer { connected ->
             networkBar.visibility = if (connected) View.GONE else View.VISIBLE
         })
@@ -168,13 +164,16 @@ class MainActivity : AppCompatActivity() {
                     try {
                         AvatarHelper.loadInto(
                             avatarView, botId, botId, "private",
-                            onSuccess = {
+                            onHasAvatar = {
                                 fallbackView.visibility = View.GONE
                                 avatarView.visibility = View.VISIBLE
                             },
-                            onError = {
+                            onNoAvatar = {
                                 fallbackView.visibility = View.VISIBLE
                                 avatarView.visibility = View.GONE
+                            },
+                            onNetworkError = {
+                                // 保持现有显示
                             }
                         )
                     } catch (e: Exception) {
@@ -195,6 +194,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateNetworkStatus() {
-        // 初始状态由 LiveData 决定，无需 BroadcastReceiver
+        // 初始状态由 LiveData 决定
     }
 }

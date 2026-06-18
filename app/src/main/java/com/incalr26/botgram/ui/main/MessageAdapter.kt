@@ -54,13 +54,16 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                 CoroutineScope(Dispatchers.Main).launch {
                     AvatarHelper.loadInto(
                         holder.avatar, userId, chatId, "private",
-                        onSuccess = {
+                        onHasAvatar = {
                             holder.avatarFallback.visibility = View.GONE
                             holder.avatar.visibility = View.VISIBLE
                         },
-                        onError = {
+                        onNoAvatar = {
                             holder.avatarFallback.visibility = View.VISIBLE
                             holder.avatar.visibility = View.GONE
+                        },
+                        onNetworkError = {
+                            // 保持当前显示
                         }
                     )
                 }

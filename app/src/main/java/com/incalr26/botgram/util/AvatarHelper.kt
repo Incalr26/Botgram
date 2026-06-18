@@ -1,6 +1,8 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -65,10 +67,6 @@ object AvatarHelper {
     }
 
     private suspend fun getGroupAvatarUrl(chatId: Long): String? {
-        val repo = ChatRepository(BotApp.instance.databaseHelper)
-        val chat = repo.getChatById(chatId)
-        if (chat?.avatarUrl != null) return chat.avatarUrl
-
         val token = getToken() ?: return null
         return withContext(Dispatchers.IO) {
             try {
@@ -82,11 +80,7 @@ object AvatarHelper {
                         val photo = chatObj.optJSONObject("photo")
                         if (photo != null) {
                             val fileId = photo.getString("small_file_id")
-                            val fileUrl = getFileUrl(token, fileId)
-                            if (fileUrl != null) {
-                                repo.updateAvatarUrl(chatId, fileUrl)
-                                fileUrl
-                            } else null
+                            getFileUrl(token, fileId)
                         } else null
                     } else null
                 } else null
@@ -96,31 +90,67 @@ object AvatarHelper {
         }
     }
 
+    /**
+     * 加载头像，回调保证在主线程执行。
+     */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
         userId: Long?,
         chatId: Long,
         type: String,
-        onSuccess: (() -> Unit)? = null,
-        onError: (() -> Unit)? = null
+        onHasAvatar: (() -> Unit)? = null,
+        onNoAvatar: (() -> Unit)? = null,
+        onNetworkError: (() -> Unit)? = null
     ) {
         val context = imageView.context
+        val repo = ChatRepository(BotApp.instance.databaseHelper)
+
+        // 1. 先从数据库缓存获取
+        val chat = repo.getChatById(chatId)
+        val cachedUrl = chat?.avatarUrl
+
+        if (cachedUrl == "none") {
+            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+            return
+        } else if (cachedUrl != null && cachedUrl.isNotEmpty()) {
+            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
+            return
+        }
+
+        // 2. 没有缓存，请求 API
         val url: String? = when (type) {
             "private" -> if (userId != null) getUserProfilePhotos(userId) else null
             "group", "supergroup" -> getGroupAvatarUrl(chatId)
             else -> null
         }
 
+        if (url != null) {
+            repo.updateAvatarUrl(chatId, url)
+            loadUrl(context, imageView, url, onHasAvatar, onNetworkError)
+        } else {
+            Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
+        }
+    }
+
+    private fun loadUrl(
+        context: Context,
+        imageView: android.widget.ImageView,
+        url: String,
+        onSuccess: (() -> Unit)?,
+        onError: (() -> Unit)?
+    ) {
         val request = ImageRequest.Builder(context)
             .data(url)
             .crossfade(true)
             .transformations(CircleCropTransformation())
-            .placeholder(null)
-            .error(null)
             .target(imageView)
             .listener(
-                onSuccess = { _, _ -> onSuccess?.invoke() },
-                onError = { _, _ -> onError?.invoke() }
+                onSuccess = { _, _ ->
+                    Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
+                },
+                onError = { _, _ ->
+                    Handler(Looper.getMainLooper()).post { onError?.invoke() }
+                }
             )
             .build()
         context.imageLoader.enqueue(request)
