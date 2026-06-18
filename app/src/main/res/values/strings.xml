@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Botgram</string>
+    <string name="login_title">登录 Telegram Bot</string>
+    <string name="token_hint">请输入 Bot Token</string>
+    <string name="login_button">登录</string>
+    <string name="invalid_token">Token 无效或网络错误</string>
+    <string name="privacy_notice">请检查你的 Bot 是否开启了隐私模式，如果开启，将无法接收所有群消息。建议在 @BotFather 中使用 /setprivacy 关闭。</string>
+</resources>
