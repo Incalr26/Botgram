@@ -10,6 +10,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -89,7 +90,13 @@ class ChatActivity : AppCompatActivity() {
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
-            registerReceiver(messageReceiver, IntentFilter("com.incalr26.botgram.NEW_MESSAGE"))
+            // 使用 ContextCompat 注册，明确指定不导出
+            ContextCompat.registerReceiver(
+                this,
+                messageReceiver,
+                IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
 
         } catch (e: Exception) {
             gotoCrash(e)
