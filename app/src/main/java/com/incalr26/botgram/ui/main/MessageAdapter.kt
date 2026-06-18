@@ -42,7 +42,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_RTL
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
         } else {
-            // 设置首字母回退
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -53,21 +52,17 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
             val chatId = message.chatId
             if (userId != null) {
                 CoroutineScope(Dispatchers.Main).launch {
-                    try {
-                        AvatarHelper.loadInto(holder.avatar, userId, chatId, "private")
-                        holder.avatar.post {
-                            if (holder.avatar.drawable == null) {
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatar.visibility = View.GONE
-                            } else {
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatar.visibility = View.VISIBLE
-                            }
+                    AvatarHelper.loadInto(
+                        holder.avatar, userId, chatId, "private",
+                        onSuccess = {
+                            holder.avatarFallback.visibility = View.GONE
+                            holder.avatar.visibility = View.VISIBLE
+                        },
+                        onError = {
+                            holder.avatarFallback.visibility = View.VISIBLE
+                            holder.avatar.visibility = View.GONE
                         }
-                    } catch (e: Exception) {
-                        holder.avatarFallback.visibility = View.VISIBLE
-                        holder.avatar.visibility = View.GONE
-                    }
+                    )
                 }
             } else {
                 holder.avatarFallback.visibility = View.VISIBLE
@@ -77,7 +72,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         }
 
         holder.senderName.text = message.senderName ?: "未知"
-
         val rawText = message.text ?: ""
         val formatted = MessageFormatter.format(rawText, message.entities)
         holder.messageText.text = formatted

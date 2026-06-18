@@ -18,9 +18,9 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorSurface"
+            android:background="?attr/colorSurfaceVariant"
             app:title="@string/app_name"
-            app:titleTextColor="?attr/colorOnSurface"
+            app:titleTextColor="?attr/colorOnSurfaceVariant"
             app:navigationIcon="?attr/homeAsUpIndicator" />
 
         <TextView
@@ -48,5 +48,6 @@
         android:layout_gravity="start"
         android:fitsSystemWindows="true"
         app:headerLayout="@layout/nav_header"
-        app:menu="@menu/navigation_menu" />
+        app:menu="@menu/navigation_menu"
+        app:itemBackground="@drawable/nav_item_bg" />
 </androidx.drawerlayout.widget.DrawerLayout>

@@ -8,7 +8,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "botgram.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
 
         const val TABLE_CHATS = "chats"
         const val TABLE_MESSAGES = "messages"
@@ -23,6 +23,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_LAST_TIME = "lastTime"
         const val COL_UNREAD_COUNT = "unreadCount"
         const val COL_AVATAR_URL = "avatarUrl"
+        const val COL_ACCOUNT_HASH = "accountHash"
 
         const val COL_MESSAGE_ID = "messageId"
         const val COL_SENDER_USER_ID = "senderUserId"
@@ -46,7 +47,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_LAST_MESSAGE TEXT,
                 $COL_LAST_TIME INTEGER NOT NULL DEFAULT 0,
                 $COL_UNREAD_COUNT INTEGER NOT NULL DEFAULT 0,
-                $COL_AVATAR_URL TEXT
+                $COL_AVATAR_URL TEXT,
+                $COL_ACCOUNT_HASH TEXT NOT NULL DEFAULT ''
             )
         """.trimIndent()
 
@@ -73,6 +75,11 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_AVATAR_URL TEXT")
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_ENTITIES TEXT")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_ACCOUNT_HASH TEXT NOT NULL DEFAULT ''")
+            // 将现有数据标记为旧账号，以便隐藏
+            db.execSQL("UPDATE $TABLE_CHATS SET $COL_ACCOUNT_HASH = 'legacy'")
         }
     }
 }

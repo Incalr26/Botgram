@@ -1,9 +1,11 @@
 package com.incalr26.botgram.data.repository
 
 import android.content.ContentValues
+import android.content.Context
 import android.database.Cursor
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.data.local.DatabaseHelper
 import com.incalr26.botgram.data.local.entity.ChatEntity
 import kotlinx.coroutines.Dispatchers
@@ -14,11 +16,19 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
     private val _allChats = MutableLiveData<List<ChatEntity>>()
     val allChats: LiveData<List<ChatEntity>> = _allChats
 
+    private fun currentHash(): String {
+        val token = BotApp.instance.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+            .getString("bot_token", "") ?: ""
+        return token.hashCode().toString()
+    }
+
     fun refreshChats() {
         val db = dbHelper.readableDatabase
+        val hash = currentHash()
         val cursor: Cursor = db.query(
-            DatabaseHelper.TABLE_CHATS, null, null, null, null, null,
-            "${DatabaseHelper.COL_LAST_TIME} DESC"
+            DatabaseHelper.TABLE_CHATS, null,
+            "${DatabaseHelper.COL_ACCOUNT_HASH} = ?", arrayOf(hash),
+            null, null, "${DatabaseHelper.COL_LAST_TIME} DESC"
         )
         val chats = mutableListOf<ChatEntity>()
         while (cursor.moveToNext()) {
@@ -30,10 +40,11 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
 
     suspend fun getChatById(chatId: Long): ChatEntity? = withContext(Dispatchers.IO) {
         val db = dbHelper.readableDatabase
+        val hash = currentHash()
         db.query(
             DatabaseHelper.TABLE_CHATS, null,
-            "${DatabaseHelper.COL_CHAT_ID} = ?", arrayOf(chatId.toString()),
-            null, null, null
+            "${DatabaseHelper.COL_CHAT_ID} = ? AND ${DatabaseHelper.COL_ACCOUNT_HASH} = ?",
+            arrayOf(chatId.toString(), hash), null, null, null
         ).use { cursor ->
             if (cursor.moveToFirst()) chatFromCursor(cursor) else null
         }
@@ -41,9 +52,10 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
 
     suspend fun insertOrUpdateChat(chat: ChatEntity) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
+        val hash = currentHash()
         val existing = getChatById(chat.chatId)
         val newUnread = if (existing != null) existing.unreadCount + 1 else 1
-        val finalChat = chat.copy(unreadCount = newUnread)
+        val finalChat = chat.copy(unreadCount = newUnread, accountHash = hash)
         val values = ContentValues().apply {
             put(DatabaseHelper.COL_CHAT_ID, finalChat.chatId)
             put(DatabaseHelper.COL_TYPE, finalChat.type)
@@ -55,6 +67,7 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
             put(DatabaseHelper.COL_LAST_TIME, finalChat.lastTime)
             put(DatabaseHelper.COL_UNREAD_COUNT, finalChat.unreadCount)
             put(DatabaseHelper.COL_AVATAR_URL, finalChat.avatarUrl)
+            put(DatabaseHelper.COL_ACCOUNT_HASH, hash)
         }
         db.insertWithOnConflict(
             DatabaseHelper.TABLE_CHATS, null, values,
@@ -63,27 +76,37 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
         refreshChats()
     }
 
+    // 其他方法保持不变，但 updateUnreadCount 等也需要加入 hash 条件，避免误改其他 bot 的数据
     suspend fun updateUnreadCount(chatId: Long, count: Int) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
+        val hash = currentHash()
         val values = ContentValues().apply { put(DatabaseHelper.COL_UNREAD_COUNT, count) }
-        db.update(DatabaseHelper.TABLE_CHATS, values, "${DatabaseHelper.COL_CHAT_ID} = ?", arrayOf(chatId.toString()))
+        db.update(DatabaseHelper.TABLE_CHATS, values,
+            "${DatabaseHelper.COL_CHAT_ID} = ? AND ${DatabaseHelper.COL_ACCOUNT_HASH} = ?",
+            arrayOf(chatId.toString(), hash))
         refreshChats()
     }
 
     suspend fun updateLastMessage(chatId: Long, message: String, time: Long) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
+        val hash = currentHash()
         val values = ContentValues().apply {
             put(DatabaseHelper.COL_LAST_MESSAGE, message)
             put(DatabaseHelper.COL_LAST_TIME, time)
         }
-        db.update(DatabaseHelper.TABLE_CHATS, values, "${DatabaseHelper.COL_CHAT_ID} = ?", arrayOf(chatId.toString()))
+        db.update(DatabaseHelper.TABLE_CHATS, values,
+            "${DatabaseHelper.COL_CHAT_ID} = ? AND ${DatabaseHelper.COL_ACCOUNT_HASH} = ?",
+            arrayOf(chatId.toString(), hash))
         refreshChats()
     }
 
     suspend fun updateAvatarUrl(chatId: Long, avatarUrl: String) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
+        val hash = currentHash()
         val values = ContentValues().apply { put(DatabaseHelper.COL_AVATAR_URL, avatarUrl) }
-        db.update(DatabaseHelper.TABLE_CHATS, values, "${DatabaseHelper.COL_CHAT_ID} = ?", arrayOf(chatId.toString()))
+        db.update(DatabaseHelper.TABLE_CHATS, values,
+            "${DatabaseHelper.COL_CHAT_ID} = ? AND ${DatabaseHelper.COL_ACCOUNT_HASH} = ?",
+            arrayOf(chatId.toString(), hash))
         refreshChats()
     }
 
@@ -98,7 +121,8 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
             lastMessage = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_LAST_MESSAGE)),
             lastTime = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_LAST_TIME)),
             unreadCount = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_UNREAD_COUNT)),
-            avatarUrl = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_AVATAR_URL))
+            avatarUrl = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_AVATAR_URL)),
+            accountHash = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_ACCOUNT_HASH))
         )
     }
 }

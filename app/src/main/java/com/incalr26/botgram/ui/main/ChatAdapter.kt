@@ -50,7 +50,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 设置首字母回退
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -58,27 +57,20 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
 
         val userId: Long? = if (chat.type == "private") chat.chatId else null
         CoroutineScope(Dispatchers.Main).launch {
-            try {
-                // 加载成功会覆盖，失败保持 fallback 可见
-                AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
-                // 如果 loadInto 完成后图片仍为 null（无网络等），可手动显示 fallback
-                holder.avatarImage.post {
-                    if (holder.avatarImage.drawable == null) {
-                        holder.avatarFallback.visibility = View.VISIBLE
-                        holder.avatarImage.visibility = View.GONE
-                    } else {
-                        holder.avatarFallback.visibility = View.GONE
-                        holder.avatarImage.visibility = View.VISIBLE
-                    }
+            AvatarHelper.loadInto(
+                holder.avatarImage, userId, chat.chatId, chat.type,
+                onSuccess = {
+                    holder.avatarFallback.visibility = View.GONE
+                    holder.avatarImage.visibility = View.VISIBLE
+                },
+                onError = {
+                    holder.avatarFallback.visibility = View.VISIBLE
+                    holder.avatarImage.visibility = View.GONE
                 }
-            } catch (e: Exception) {
-                holder.avatarFallback.visibility = View.VISIBLE
-                holder.avatarImage.visibility = View.GONE
-            }
+            )
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
-
         if (chat.unreadCount > 0) {
             holder.unreadBadge.visibility = View.VISIBLE
             holder.unreadBadge.text = chat.unreadCount.toString()

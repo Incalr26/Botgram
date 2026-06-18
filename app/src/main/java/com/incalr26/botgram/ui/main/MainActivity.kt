@@ -113,49 +113,65 @@ class MainActivity : AppCompatActivity() {
             try {
                 val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
                     .getString("bot_token", "") ?: return@launch
-                val url = "https://api.telegram.org/bot$token/getMe"
-                val request = Request.Builder().url(url).build()
-                val response = ApiClient.getClient().newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "")
-                    if (json.getBoolean("ok")) {
-                        val bot = json.getJSONObject("result")
-                        val botId = bot.getLong("id")
-                        val firstName = bot.optString("first_name", "Bot")
-                        val username = bot.optString("username", null)
-                        withContext(Dispatchers.Main) {
-                            val headerView = navigationView.getHeaderView(0)
-                            headerView.findViewById<TextView>(R.id.botName).text = firstName
-                            headerView.findViewById<TextView>(R.id.botUsername).text =
-                                if (username != null) "@$username" else "无用户名"
 
-                            val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
-                            val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
-                            val fallback = firstName.take(1).uppercase()
-                            fallbackView.text = fallback
-                            fallbackView.visibility = View.VISIBLE
-                            avatarView.visibility = View.GONE
+                // 获取 Bot 基本信息
+                val getMeUrl = "https://api.telegram.org/bot$token/getMe"
+                val meRequest = Request.Builder().url(getMeUrl).build()
+                val meResponse = ApiClient.getClient().newCall(meRequest).execute()
+                if (!meResponse.isSuccessful) return@launch
+                val meJson = JSONObject(meResponse.body?.string() ?: "")
+                if (!meJson.getBoolean("ok")) return@launch
+                val bot = meJson.getJSONObject("result")
+                val botId = bot.getLong("id")
+                val firstName = bot.optString("first_name", "Bot")
+                val username = bot.optString("username", null)
 
-                            // 加载头像
-                            try {
-                                AvatarHelper.loadInto(avatarView, botId, botId, "private")
-                                avatarView.post {
-                                    if (avatarView.drawable == null) {
-                                        fallbackView.visibility = View.VISIBLE
-                                        avatarView.visibility = View.GONE
-                                    } else {
-                                        fallbackView.visibility = View.GONE
-                                        avatarView.visibility = View.VISIBLE
-                                    }
-                                }
-                            } catch (e: Exception) {
+                // 获取 Bot 描述
+                var description: String? = null
+                try {
+                    val descUrl = "https://api.telegram.org/bot$token/getMyDescription"
+                    val descRequest = Request.Builder().url(descUrl).build()
+                    val descResponse = ApiClient.getClient().newCall(descRequest).execute()
+                    if (descResponse.isSuccessful) {
+                        val descJson = JSONObject(descResponse.body?.string() ?: "")
+                        if (descJson.getBoolean("ok")) {
+                            description = descJson.getJSONObject("result").optString("description", null)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                withContext(Dispatchers.Main) {
+                    val headerView = navigationView.getHeaderView(0)
+                    headerView.findViewById<TextView>(R.id.botName).text = firstName
+                    headerView.findViewById<TextView>(R.id.botUsername).text =
+                        if (username != null) "@$username" else "无用户名"
+                    headerView.findViewById<TextView>(R.id.botDescription).text = description ?: ""
+
+                    val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
+                    val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
+                    val fallback = firstName.take(1).uppercase()
+                    fallbackView.text = fallback
+                    fallbackView.visibility = View.VISIBLE
+                    avatarView.visibility = View.GONE
+
+                    try {
+                        AvatarHelper.loadInto(
+                            avatarView, botId, botId, "private",
+                            onSuccess = {
+                                fallbackView.visibility = View.GONE
+                                avatarView.visibility = View.VISIBLE
+                            },
+                            onError = {
                                 fallbackView.visibility = View.VISIBLE
                                 avatarView.visibility = View.GONE
                             }
-                        }
+                        )
+                    } catch (e: Exception) {
+                        fallbackView.visibility = View.VISIBLE
+                        avatarView.visibility = View.GONE
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (_: Exception) {}
         }
     }
 

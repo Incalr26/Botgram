@@ -10,5 +10,6 @@ data class ChatEntity(
     val lastMessage: String?,
     val lastTime: Long,
     val unreadCount: Int = 0,
-    val avatarUrl: String? = null          // 缓存的头像下载链接
+    val avatarUrl: String? = null,
+    val accountHash: String = ""
 )

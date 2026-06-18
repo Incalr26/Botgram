@@ -85,7 +85,6 @@ object AvatarHelper {
                             val fileUrl = getFileUrl(token, fileId)
                             if (fileUrl != null) {
                                 repo.updateAvatarUrl(chatId, fileUrl)
-                                // 返回文件 URL
                                 fileUrl
                             } else null
                         } else null
@@ -101,7 +100,9 @@ object AvatarHelper {
         imageView: android.widget.ImageView,
         userId: Long?,
         chatId: Long,
-        type: String
+        type: String,
+        onSuccess: (() -> Unit)? = null,
+        onError: (() -> Unit)? = null
     ) {
         val context = imageView.context
         val url: String? = when (type) {
@@ -114,9 +115,13 @@ object AvatarHelper {
             .data(url)
             .crossfade(true)
             .transformations(CircleCropTransformation())
-            .placeholder(android.R.drawable.ic_menu_report_image)
-            .error(android.R.drawable.ic_menu_report_image)
+            .placeholder(null)
+            .error(null)
             .target(imageView)
+            .listener(
+                onSuccess = { _, _ -> onSuccess?.invoke() },
+                onError = { _, _ -> onError?.invoke() }
+            )
             .build()
         context.imageLoader.enqueue(request)
     }
