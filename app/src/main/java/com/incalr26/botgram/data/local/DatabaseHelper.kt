@@ -8,13 +8,11 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "botgram.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
-        // 表名
         const val TABLE_CHATS = "chats"
         const val TABLE_MESSAGES = "messages"
 
-        // 会话表字段
         const val COL_CHAT_ID = "chatId"
         const val COL_TYPE = "type"
         const val COL_TITLE = "title"
@@ -24,8 +22,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_LAST_MESSAGE = "lastMessage"
         const val COL_LAST_TIME = "lastTime"
         const val COL_UNREAD_COUNT = "unreadCount"
+        const val COL_AVATAR_URL = "avatarUrl"
 
-        // 消息表字段
         const val COL_MESSAGE_ID = "messageId"
         const val COL_SENDER_USER_ID = "senderUserId"
         const val COL_SENDER_NAME = "senderName"
@@ -33,6 +31,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_DATE = "date"
         const val COL_IS_OUTGOING = "isOutgoing"
         const val COL_RAW_JSON = "rawJson"
+        const val COL_ENTITIES = "entities"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -46,7 +45,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_USERNAME TEXT,
                 $COL_LAST_MESSAGE TEXT,
                 $COL_LAST_TIME INTEGER NOT NULL DEFAULT 0,
-                $COL_UNREAD_COUNT INTEGER NOT NULL DEFAULT 0
+                $COL_UNREAD_COUNT INTEGER NOT NULL DEFAULT 0,
+                $COL_AVATAR_URL TEXT
             )
         """.trimIndent()
 
@@ -60,6 +60,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_DATE INTEGER NOT NULL,
                 $COL_IS_OUTGOING INTEGER NOT NULL DEFAULT 0,
                 $COL_RAW_JSON TEXT,
+                $COL_ENTITIES TEXT,
                 PRIMARY KEY ($COL_MESSAGE_ID, $COL_CHAT_ID)
             )
         """.trimIndent()
@@ -69,6 +70,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 初始版本无需升级
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_AVATAR_URL TEXT")
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_ENTITIES TEXT")
+        }
     }
 }

@@ -3,8 +3,10 @@ package com.incalr26.botgram.util
 import android.content.Context
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.data.remote.ApiClient
+import com.incalr26.botgram.data.repository.ChatRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -62,25 +64,60 @@ object AvatarHelper {
         }
     }
 
-    fun getChatAvatarUrl(chatId: Long): String {
-        // 群组头像可以使用公开链接，私聊也可用（但无头像则默认图）
-        return "https://t.me/i/userpic/320/$chatId.jpg"
+    private suspend fun getGroupAvatarUrl(chatId: Long): String? {
+        val repo = ChatRepository(BotApp.instance.databaseHelper)
+        val chat = repo.getChatById(chatId)
+        if (chat?.avatarUrl != null) return chat.avatarUrl
+
+        val token = getToken() ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
+                val request = Request.Builder().url(url).build()
+                val response = ApiClient.getClient().newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    if (json.getBoolean("ok")) {
+                        val chatObj = json.getJSONObject("result")
+                        val photo = chatObj.optJSONObject("photo")
+                        if (photo != null) {
+                            val fileId = photo.getString("small_file_id")
+                            val fileUrl = getFileUrl(token, fileId)
+                            if (fileUrl != null) {
+                                repo.updateAvatarUrl(chatId, fileUrl)
+                                // 返回文件 URL
+                                fileUrl
+                            } else null
+                        } else null
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
     }
 
-    /** 加载头像到 ImageView，Coil 自动处理 placeholder/error */
-    suspend fun loadInto(imageView: android.widget.ImageView, userId: Long?, chatId: Long, type: String) {
-        val url: String? = when {
-            type == "private" && userId != null -> getUserProfilePhotos(userId)
-            type == "group" || type == "supergroup" -> getChatAvatarUrl(chatId)
+    suspend fun loadInto(
+        imageView: android.widget.ImageView,
+        userId: Long?,
+        chatId: Long,
+        type: String
+    ) {
+        val context = imageView.context
+        val url: String? = when (type) {
+            "private" -> if (userId != null) getUserProfilePhotos(userId) else null
+            "group", "supergroup" -> getGroupAvatarUrl(chatId)
             else -> null
         }
-        val request = ImageRequest.Builder(imageView.context)
-            .data(url ?: getChatAvatarUrl(chatId)) // fallback 到公开 URL
+
+        val request = ImageRequest.Builder(context)
+            .data(url)
             .crossfade(true)
-            .error(android.R.drawable.ic_menu_report_image)
+            .transformations(CircleCropTransformation())
             .placeholder(android.R.drawable.ic_menu_report_image)
+            .error(android.R.drawable.ic_menu_report_image)
             .target(imageView)
             .build()
-        imageView.context.imageLoader.enqueue(request)
+        context.imageLoader.enqueue(request)
     }
 }

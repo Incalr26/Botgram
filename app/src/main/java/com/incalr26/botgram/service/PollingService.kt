@@ -16,6 +16,7 @@ import com.incalr26.botgram.data.repository.MessageRepository
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
+import org.json.JSONArray
 
 class PollingService : Service() {
 
@@ -64,8 +65,7 @@ class PollingService : Service() {
                             offset = updateId + 1
                             prefs.edit().putLong("update_offset", offset).apply()
                             if (update.has("message")) {
-                                val msg = update.getJSONObject("message")
-                                processMessage(msg)
+                                processMessage(update.getJSONObject("message"))
                             }
                         }
                     }
@@ -105,6 +105,12 @@ class PollingService : Service() {
         val from = msg.optJSONObject("from")
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
+        val text = msg.optString("text", null)
+
+        // 提取 entities JSON 字符串
+        val entitiesJson = if (msg.has("entities")) {
+            msg.getJSONArray("entities").toString()
+        } else null
 
         messageRepository.insertMessage(
             MessageEntity(
@@ -112,14 +118,15 @@ class PollingService : Service() {
                 chatId = chatId,
                 senderUserId = senderId,
                 senderName = senderName,
-                text = lastMessageText,
+                text = text,
                 date = msg.getLong("date"),
                 isOutgoing = false,
-                rawJson = msg.toString()
+                rawJson = msg.toString(),
+                entities = entitiesJson
             )
         )
 
-        // 发送广播通知聊天界面刷新
+        // 广播新消息
         val refreshIntent = Intent("com.incalr26.botgram.NEW_MESSAGE")
         refreshIntent.putExtra("chatId", chatId)
         sendBroadcast(refreshIntent)
@@ -136,11 +143,7 @@ class PollingService : Service() {
     private fun createNotification(): Notification {
         val channelId = "botgram_polling"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "消息监听",
-                NotificationManager.IMPORTANCE_LOW
-            )
+            val channel = NotificationChannel(channelId, "消息监听", NotificationManager.IMPORTANCE_LOW)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
         return NotificationCompat.Builder(this, channelId)

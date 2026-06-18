@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.util.AvatarHelper
+import com.incalr26.botgram.util.MessageFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -54,7 +55,11 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         }
 
         holder.senderName.text = message.senderName ?: "未知"
-        holder.messageText.text = message.text ?: ""
+
+        // 格式化文本（支持 entities）
+        val rawText = message.text ?: ""
+        val formatted = MessageFormatter.format(rawText, message.entities)
+        holder.messageText.text = formatted
     }
 
     class DiffCallback : DiffUtil.ItemCallback<MessageEntity>() {

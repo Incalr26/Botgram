@@ -21,6 +21,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatarImage: ImageView = view.findViewById(R.id.avatarImage)
         val chatName: TextView = view.findViewById(R.id.chatName)
+        val chatTypeLabel: TextView = view.findViewById(R.id.chatTypeLabel)
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
         val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
     }
@@ -40,6 +41,15 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             chat.title ?: "未命名群组"
         }
         holder.chatName.text = name
+
+        // 显示聊天类型
+        holder.chatTypeLabel.text = when (chat.type) {
+            "private" -> "私聊"
+            "group" -> "群组"
+            "supergroup" -> "超级群组"
+            "channel" -> "频道"
+            else -> chat.type
+        }
 
         val userId: Long? = if (chat.type == "private") chat.chatId else null
         CoroutineScope(Dispatchers.Main).launch {

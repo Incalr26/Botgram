@@ -60,6 +60,7 @@ class ChatActivity : AppCompatActivity() {
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
+            supportActionBar?.subtitle = null
 
             val app = BotApp.instance ?: throw IllegalStateException("应用未初始化")
 
@@ -86,11 +87,10 @@ class ChatActivity : AppCompatActivity() {
 
             lifecycleScope.launch(Dispatchers.IO + crashHandler) {
                 loadMessagesInternal()
-                loadTitle()
+                loadTitleAndType()
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
-            // 使用 ContextCompat 注册，明确指定不导出
             ContextCompat.registerReceiver(
                 this,
                 messageReceiver,
@@ -103,15 +103,7 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun loadMessagesInternal() {
-        val messages = messageRepository.getMessages(chatId)
-        withContext(Dispatchers.Main) {
-            adapter.submitList(messages)
-            recyclerView.scrollToPosition(adapter.itemCount - 1)
-        }
-    }
-
-    private suspend fun loadTitle() {
+    private suspend fun loadTitleAndType() {
         val chat = chatRepository.getChatById(chatId)
         withContext(Dispatchers.Main) {
             if (chat != null) {
@@ -121,7 +113,23 @@ class ChatActivity : AppCompatActivity() {
                     chat.title ?: "群组"
                 }
                 supportActionBar?.title = name
+                val typeStr = when (chat.type) {
+                    "private" -> "私聊"
+                    "group" -> "群组"
+                    "supergroup" -> "超级群组"
+                    "channel" -> "频道"
+                    else -> chat.type
+                }
+                supportActionBar?.subtitle = typeStr
             }
+        }
+    }
+
+    private suspend fun loadMessagesInternal() {
+        val messages = messageRepository.getMessages(chatId)
+        withContext(Dispatchers.Main) {
+            adapter.submitList(messages)
+            recyclerView.scrollToPosition(adapter.itemCount - 1)
         }
     }
 

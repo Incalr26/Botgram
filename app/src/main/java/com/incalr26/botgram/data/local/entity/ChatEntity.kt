@@ -9,5 +9,6 @@ data class ChatEntity(
     val username: String?,
     val lastMessage: String?,
     val lastTime: Long,
-    val unreadCount: Int = 0
+    val unreadCount: Int = 0,
+    val avatarUrl: String? = null          // 缓存的头像下载链接
 )
