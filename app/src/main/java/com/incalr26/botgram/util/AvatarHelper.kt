@@ -1,8 +1,6 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -21,7 +19,8 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    private suspend fun getUserProfilePhotos(userId: Long): String? {
+    /** 获取用户头像 URL，失败返回 null */
+    suspend fun getUserAvatarUrl(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
         return withContext(Dispatchers.IO) {
@@ -38,6 +37,31 @@ object AvatarHelper {
                                 val fileId = firstPhoto.getJSONObject(0).getString("file_id")
                                 getFileUrl(token, fileId)
                             } else null
+                        } else null
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /** 获取群组/频道头像 URL */
+    suspend fun getChatAvatarUrl(chatId: Long): String? {
+        val token = getToken() ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
+                val request = Request.Builder().url(url).build()
+                val response = ApiClient.getClient().newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    if (json.getBoolean("ok")) {
+                        val chatObj = json.getJSONObject("result")
+                        val photo = chatObj.optJSONObject("photo")
+                        if (photo != null) {
+                            val fileId = photo.getString("small_file_id")
+                            getFileUrl(token, fileId)
                         } else null
                     } else null
                 } else null
@@ -66,89 +90,12 @@ object AvatarHelper {
         }
     }
 
-    private suspend fun getGroupAvatarUrl(chatId: Long): String? {
-        val token = getToken() ?: return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
-                val request = Request.Builder().url(url).build()
-                val response = ApiClient.getClient().newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "")
-                    if (json.getBoolean("ok")) {
-                        val chatObj = json.getJSONObject("result")
-                        val photo = chatObj.optJSONObject("photo")
-                        if (photo != null) {
-                            val fileId = photo.getString("small_file_id")
-                            getFileUrl(token, fileId)
-                        } else null
-                    } else null
-                } else null
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
-    /**
-     * 加载头像。
-     * - 若数据库有缓存 URL，直接加载，成功显示真实头像，失败保持原样（网络错误不改变）。
-     * - 若无缓存，请求 API：成功则缓存并显示，无头像则显示首字符，网络错误保持原样。
-     */
-    suspend fun loadInto(
-        imageView: android.widget.ImageView,
-        userId: Long?,
-        chatId: Long,
-        type: String,
-        onHasAvatar: (() -> Unit)? = null,
-        onNoAvatar: (() -> Unit)? = null,
-        onNetworkError: (() -> Unit)? = null
-    ) {
-        val context = imageView.context
-        val repo = ChatRepository(BotApp.instance.databaseHelper)
-        val chat = repo.getChatById(chatId)
-        val cachedUrl = chat?.avatarUrl
-
-        if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            // 有缓存，尝试加载
-            loadUrl(context, imageView, cachedUrl,
-                onSuccess = { onHasAvatar?.invoke() },
-                onError = {
-                    // 加载失败（网络问题），不改变显示，仍触发 onNetworkError 让 UI 保持
-                    Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
-                }
-            )
-            return
-        }
-
-        // 无缓存，请求 API
-        val url: String? = when (type) {
-            "private" -> if (userId != null) getUserProfilePhotos(userId) else null
-            "group", "supergroup" -> getGroupAvatarUrl(chatId)
-            else -> null
-        }
-
-        if (url != null) {
-            // 成功获取到头像 URL，缓存并加载
-            repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url,
-                onSuccess = { onHasAvatar?.invoke() },
-                onError = {
-                    Handler(Looper.getMainLooper()).post { onNetworkError?.invoke() }
-                }
-            )
-        } else {
-            // 无头像
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
-        }
-    }
-
-    private fun loadUrl(
+    /** 使用 Coil 加载头像，成功显示 ImageView，失败显示 fallback */
+    fun loadWithCoil(
         context: Context,
         imageView: android.widget.ImageView,
-        url: String,
-        onSuccess: (() -> Unit)?,
-        onError: (() -> Unit)?
+        fallbackView: android.widget.TextView,
+        url: String?
     ) {
         val request = ImageRequest.Builder(context)
             .data(url)
@@ -157,10 +104,12 @@ object AvatarHelper {
             .target(imageView)
             .listener(
                 onSuccess = { _, _ ->
-                    Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
+                    fallbackView.visibility = android.view.View.GONE
+                    imageView.visibility = android.view.View.VISIBLE
                 },
                 onError = { _, _ ->
-                    Handler(Looper.getMainLooper()).post { onError?.invoke() }
+                    fallbackView.visibility = android.view.View.VISIBLE
+                    imageView.visibility = android.view.View.GONE
                 }
             )
             .build()

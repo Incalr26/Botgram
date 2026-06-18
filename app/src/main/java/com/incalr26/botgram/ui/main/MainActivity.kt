@@ -79,9 +79,7 @@ class MainActivity : AppCompatActivity() {
         networkBar = findViewById(R.id.networkStatusBar)
         updateNetworkStatus()
 
-        // 恢复旧数据
         recoverLegacyChats()
-
         loadBotInfo()
 
         navigationView.setNavigationItemSelectedListener { item ->
@@ -104,7 +102,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // 监听网络状态
         NetworkStateHolder.isConnected.observe(this, Observer { connected ->
             networkBar.visibility = if (connected) View.GONE else View.VISIBLE
         })
@@ -158,27 +155,29 @@ class MainActivity : AppCompatActivity() {
                     val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
-                    fallbackView.visibility = View.VISIBLE
-                    avatarView.visibility = View.GONE
 
-                    try {
-                        AvatarHelper.loadInto(
-                            avatarView, botId, botId, "private",
-                            onHasAvatar = {
-                                fallbackView.visibility = View.GONE
-                                avatarView.visibility = View.VISIBLE
-                            },
-                            onNoAvatar = {
-                                fallbackView.visibility = View.VISIBLE
-                                avatarView.visibility = View.GONE
-                            },
-                            onNetworkError = {
-                                // 保持现有显示
-                            }
-                        )
-                    } catch (e: Exception) {
+                    // 加载 Bot 头像：先查缓存
+                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
+                        BotApp.instance.databaseHelper
+                    )
+                    val botChat = repo.getChatById(botId) // Bot 也是 private 类型
+                    val cachedUrl = botChat?.avatarUrl
+                    if (!cachedUrl.isNullOrEmpty()) {
+                        AvatarHelper.loadWithCoil(this@MainActivity, avatarView, fallbackView, cachedUrl)
+                    } else {
+                        // 初始显示首字符
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
+                        // 异步请求
+                        launch(Dispatchers.IO) {
+                            val url = AvatarHelper.getUserAvatarUrl(botId)
+                            if (url != null) {
+                                repo.updateAvatarUrl(botId, url)
+                                withContext(Dispatchers.Main) {
+                                    AvatarHelper.loadWithCoil(this@MainActivity, avatarView, fallbackView, url)
+                                }
+                            }
+                        }
                     }
                 }
             } catch (_: Exception) {}
@@ -193,7 +192,5 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateNetworkStatus() {
-        // 初始状态由 LiveData 决定
-    }
+    private fun updateNetworkStatus() {}
 }

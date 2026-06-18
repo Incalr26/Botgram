@@ -4,7 +4,6 @@
     android:layout_height="wrap_content"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:paddingTop="?android:attr/actionBarSize"
     android:paddingBottom="32dp"
     android:background="?attr/colorSurface"
     android:fitsSystemWindows="true">
