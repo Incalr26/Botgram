@@ -59,7 +59,6 @@ class ChatListFragment : Fragment() {
 
         swipeRefresh.setOnRefreshListener {
             chatRepository.refreshChats()
-            adapter.notifyDataSetChanged()
             swipeRefresh.isRefreshing = false
         }
 

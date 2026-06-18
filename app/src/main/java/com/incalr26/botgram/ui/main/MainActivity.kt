@@ -14,12 +14,15 @@ import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Observer
 import com.google.android.material.navigation.NavigationView
+import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.BuildConfig
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.ui.login.LoginActivity
 import com.incalr26.botgram.util.AvatarHelper
+import com.incalr26.botgram.util.NetworkStateHolder
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -29,11 +32,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navigationView: NavigationView
     private lateinit var contentLayout: View
-    private val networkReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            updateNetworkStatus()
-        }
-    }
     private var downX = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +83,9 @@ class MainActivity : AppCompatActivity() {
         networkBar = findViewById(R.id.networkStatusBar)
         updateNetworkStatus()
 
+        // 恢复旧数据
+        recoverLegacyChats()
+
         loadBotInfo()
 
         navigationView.setNavigationItemSelectedListener { item ->
@@ -106,6 +107,19 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
             true
         }
+
+        // 监听网络状态 LiveData
+        NetworkStateHolder.isConnected.observe(this, Observer { connected ->
+            networkBar.visibility = if (connected) View.GONE else View.VISIBLE
+        })
+    }
+
+    private fun recoverLegacyChats() {
+        val db = BotApp.instance.databaseHelper.writableDatabase
+        val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+            .getString("bot_token", "") ?: ""
+        val newHash = token.hashCode().toString()
+        db.execSQL("UPDATE ${com.incalr26.botgram.data.local.DatabaseHelper.TABLE_CHATS} SET ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = ? WHERE ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = 'legacy'", arrayOf(newHash))
     }
 
     private fun loadBotInfo() {
@@ -113,8 +127,6 @@ class MainActivity : AppCompatActivity() {
             try {
                 val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
                     .getString("bot_token", "") ?: return@launch
-
-                // 获取 Bot 基本信息
                 val getMeUrl = "https://api.telegram.org/bot$token/getMe"
                 val meRequest = Request.Builder().url(getMeUrl).build()
                 val meResponse = ApiClient.getClient().newCall(meRequest).execute()
@@ -126,7 +138,6 @@ class MainActivity : AppCompatActivity() {
                 val firstName = bot.optString("first_name", "Bot")
                 val username = bot.optString("username", null)
 
-                // 获取 Bot 描述
                 var description: String? = null
                 try {
                     val descUrl = "https://api.telegram.org/bot$token/getMyDescription"
@@ -183,20 +194,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        registerReceiver(networkReceiver, IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-    }
-
-    override fun onPause() {
-        super.onPause()
-        unregisterReceiver(networkReceiver)
-    }
-
     private fun updateNetworkStatus() {
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        val activeNetwork = cm.activeNetworkInfo
-        val connected = activeNetwork != null && activeNetwork.isConnected
-        networkBar.visibility = if (connected) View.GONE else View.VISIBLE
+        // 初始状态由 LiveData 决定，无需 BroadcastReceiver
     }
 }

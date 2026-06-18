@@ -1,9 +1,9 @@
 <resources>
     <style name="Theme.Botgram" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">?attr/colorSurfaceVariant</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
     <style name="Theme.Botgram.Login" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">?attr/colorSurfaceVariant</item>
     </style>
 </resources>
