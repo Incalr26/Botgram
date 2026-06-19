@@ -47,7 +47,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         } else {
             chat.title ?: "未命名群组"
         }
-        // 同步设置所有文本
         holder.chatName.text = name
         holder.chatTypeLabel.text = when (chat.type) {
             "private" -> "私聊"
@@ -56,21 +55,8 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             "channel" -> "频道"
             else -> chat.type
         }
-        holder.lastMessage.text = chat.lastMessage ?: ""
-        if (chat.lastTime > 0) {
-            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-            holder.lastTime.text = sdf.format(Date(chat.lastTime))
-        } else {
-            holder.lastTime.text = ""
-        }
-        if (chat.unreadCount > 0) {
-            holder.unreadBadge.visibility = View.VISIBLE
-            holder.unreadBadge.text = chat.unreadCount.toString()
-        } else {
-            holder.unreadBadge.visibility = View.GONE
-        }
 
-        // 头像初始状态
+        // 初始显示首字符
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -82,26 +68,55 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         // 异步加载头像
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            val avatarUrl = AvatarHelper.getAvatarUrl(chat.chatId)
-            if (holder.boundChatId == currentChatId && avatarUrl != null) {
-                val request = ImageRequest.Builder(holder.itemView.context)
-                    .data(avatarUrl)
-                    .crossfade(true)
-                    .transformations(CircleCropTransformation())
-                    .target(holder.avatarImage)
-                    .listener(
-                        onSuccess = { _, _ ->
-                            holder.avatarFallback.visibility = View.GONE
-                            holder.avatarImage.visibility = View.VISIBLE
-                        },
-                        onError = { _, _ ->
-                            holder.avatarFallback.visibility = View.VISIBLE
-                            holder.avatarImage.visibility = View.GONE
-                        }
-                    )
-                    .build()
-                holder.itemView.context.imageLoader.enqueue(request)
+            val url = when (chat.type) {
+                "private" -> AvatarHelper.getUserProfilePhotos(chat.chatId)
+                else -> AvatarHelper.getChatAvatarUrl(chat.chatId)
             }
+            if (holder.boundChatId == currentChatId) {
+                when {
+                    url != null && url != "__NO_PHOTO__" -> {
+                        // 有真实头像
+                        val request = ImageRequest.Builder(holder.itemView.context)
+                            .data(url)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(holder.avatarImage)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    holder.avatarFallback.visibility = View.GONE
+                                    holder.avatarImage.visibility = View.VISIBLE
+                                },
+                                onError = { _, _ ->
+                                    // 加载失败，保持首字符
+                                    holder.avatarFallback.visibility = View.VISIBLE
+                                    holder.avatarImage.visibility = View.GONE
+                                }
+                            )
+                            .build()
+                        holder.itemView.context.imageLoader.enqueue(request)
+                    }
+                    else -> {
+                        // 无头像或网络错误，保持首字符
+                        holder.avatarFallback.visibility = View.VISIBLE
+                        holder.avatarImage.visibility = View.GONE
+                    }
+                }
+            }
+        }
+
+        holder.lastMessage.text = chat.lastMessage ?: ""
+        if (chat.lastTime > 0) {
+            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+            holder.lastTime.text = sdf.format(Date(chat.lastTime))
+        } else {
+            holder.lastTime.text = ""
+        }
+
+        if (chat.unreadCount > 0) {
+            holder.unreadBadge.visibility = View.VISIBLE
+            holder.unreadBadge.text = chat.unreadCount.toString()
+        } else {
+            holder.unreadBadge.visibility = View.GONE
         }
     }
 

@@ -5,8 +5,14 @@
     android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingBottom="32dp"
-    android:background="?attr/colorPrimaryContainer"
-    android:fitsSystemWindows="true">
+    android:background="?attr/colorPrimaryContainer">
+
+    <!-- 状态栏占位，背景与头部一致 -->
+    <View
+        android:id="@+id/statusBarSpace"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?attr/colorPrimaryContainer" />
 
     <FrameLayout
         android:layout_width="72dp"

@@ -44,7 +44,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
 
-        // 同步设置方向和背景
+        // 同步设置方向、背景和文本
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
             holder.avatarFallback.visibility = View.GONE
@@ -53,7 +53,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
-            // 首字母占位
+            // 初始显示首字符
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -61,7 +61,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
             holder.avatar.visibility = View.GONE
         }
 
-        // 同步设置文本
         holder.senderName.text = message.senderName ?: "未知"
         val rawText = message.text ?: ""
         holder.messageText.text = MessageFormatter.format(rawText, message.entities)
@@ -69,31 +68,40 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val timeStr = sdf.format(Date(message.date * 1000))
         holder.messageInfo.text = "ID:${message.messageId}  $timeStr"
 
-        // 异步加载头像（仅接收消息）
+        // 异步加载头像
         if (!isOutgoing) {
             val userId = message.senderUserId
             if (userId != null) {
                 holder.loadJob?.cancel()
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-                    val avatarUrl = AvatarHelper.getAvatarUrl(userId)
-                    if (holder.boundMessageId == currentMsgId && avatarUrl != null) {
-                        val request = ImageRequest.Builder(holder.itemView.context)
-                            .data(avatarUrl)
-                            .crossfade(true)
-                            .transformations(CircleCropTransformation())
-                            .target(holder.avatar)
-                            .listener(
-                                onSuccess = { _, _ ->
-                                    holder.avatarFallback.visibility = View.GONE
-                                    holder.avatar.visibility = View.VISIBLE
-                                },
-                                onError = { _, _ ->
-                                    holder.avatarFallback.visibility = View.VISIBLE
-                                    holder.avatar.visibility = View.GONE
-                                }
-                            )
-                            .build()
-                        holder.itemView.context.imageLoader.enqueue(request)
+                    val url = AvatarHelper.getUserProfilePhotos(userId)
+                    if (holder.boundMessageId == currentMsgId) {
+                        when {
+                            url != null && url != "__NO_PHOTO__" -> {
+                                val request = ImageRequest.Builder(holder.itemView.context)
+                                    .data(url)
+                                    .crossfade(true)
+                                    .transformations(CircleCropTransformation())
+                                    .target(holder.avatar)
+                                    .listener(
+                                        onSuccess = { _, _ ->
+                                            holder.avatarFallback.visibility = View.GONE
+                                            holder.avatar.visibility = View.VISIBLE
+                                        },
+                                        onError = { _, _ ->
+                                            holder.avatarFallback.visibility = View.VISIBLE
+                                            holder.avatar.visibility = View.GONE
+                                        }
+                                    )
+                                    .build()
+                                holder.itemView.context.imageLoader.enqueue(request)
+                            }
+                            else -> {
+                                // 无头像或网络错误，保持首字符
+                                holder.avatarFallback.visibility = View.VISIBLE
+                                holder.avatar.visibility = View.GONE
+                            }
+                        }
                     }
                 }
             }

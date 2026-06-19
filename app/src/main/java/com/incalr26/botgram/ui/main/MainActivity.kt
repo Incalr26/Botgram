@@ -1,7 +1,6 @@
 package com.incalr26.botgram.ui.main
 
 import android.content.Intent
-import android.content.res.Resources
 import android.graphics.Color
 import android.os.Bundle
 import android.text.SpannableString
@@ -14,6 +13,10 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
 import coil.imageLoader
@@ -39,13 +42,9 @@ class MainActivity : AppCompatActivity() {
     private var downX = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        // 设置状态栏占位高度
-        val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-        val statusBarHeight = getStatusBarHeight()
-        statusBarPlaceholder.layoutParams.height = statusBarHeight
 
         val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -54,6 +53,25 @@ class MainActivity : AppCompatActivity() {
         drawerLayout = findViewById(R.id.drawerLayout)
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
+
+        // 主内容状态栏占位
+        val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+        statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
+
+        // 菜单头部状态栏占位（post 确保布局完成）
+        val headerView = navigationView.getHeaderView(0)
+        val headerStatusBarSpace = headerView.findViewById<View>(R.id.statusBarSpace)
+        headerStatusBarSpace.post {
+            headerStatusBarSpace.layoutParams.height = getStatusBarHeight()
+        }
+
+        // 菜单底部留出导航栏高度
+        navigationView.clipToPadding = false
+        ViewCompat.setOnApplyWindowInsetsListener(navigationView) { v, insets ->
+            val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            v.updatePadding(bottom = navBarHeight)
+            insets
+        }
 
         // 版本号灰色小字
         val versionItem = navigationView.menu.findItem(R.id.nav_version)
@@ -181,26 +199,21 @@ class MainActivity : AppCompatActivity() {
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
 
-                    val url = AvatarHelper.getAvatarUrl(botId)
-                    if (url != null) {
-                        val request = ImageRequest.Builder(this@MainActivity)
-                            .data(url)
-                            .crossfade(true)
-                            .transformations(CircleCropTransformation())
-                            .target(avatarView)
-                            .listener(
-                                onSuccess = { _, _ ->
-                                    fallbackView.visibility = View.GONE
-                                    avatarView.visibility = View.VISIBLE
-                                },
-                                onError = { _, _ ->
-                                    fallbackView.visibility = View.VISIBLE
-                                    avatarView.visibility = View.GONE
-                                }
-                            )
-                            .build()
-                        imageLoader.enqueue(request)
-                    }
+                    // 使用 loadInto 加载 Bot 头像
+                    AvatarHelper.loadInto(
+                        avatarView, botId, botId, "private",
+                        onHasAvatar = {
+                            fallbackView.visibility = View.GONE
+                            avatarView.visibility = View.VISIBLE
+                        },
+                        onNoAvatar = {
+                            fallbackView.visibility = View.VISIBLE
+                            avatarView.visibility = View.GONE
+                        },
+                        onNetworkError = {
+                            // 保持原样
+                        }
+                    )
                 }
             } catch (_: Exception) {}
         }
