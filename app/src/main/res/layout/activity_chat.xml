@@ -52,8 +52,8 @@
             android:src="@android:drawable/ic_menu_send"
             android:contentDescription="发送"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorPrimary"
-            android:tintMode="src_in"
+            android:tint="?attr/colorPrimaryContainer"
+            android:tintMode="multiply"
             android:scaleType="center" />
     </LinearLayout>
 </LinearLayout>
