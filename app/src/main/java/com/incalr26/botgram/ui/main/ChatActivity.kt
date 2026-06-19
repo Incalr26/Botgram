@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.view.MenuItem
+import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Toast
@@ -49,6 +50,11 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_chat)
+
+            // 设置状态栏占位高度
+            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+            val statusBarHeight = getStatusBarHeight()
+            statusBarPlaceholder.layoutParams.height = statusBarHeight
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) {
@@ -101,6 +107,11 @@ class ChatActivity : AppCompatActivity() {
         } catch (e: Exception) {
             gotoCrash(e)
         }
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     private suspend fun loadTitleAndType() {

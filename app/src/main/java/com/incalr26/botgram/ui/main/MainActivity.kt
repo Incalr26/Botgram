@@ -1,7 +1,12 @@
 package com.incalr26.botgram.ui.main
 
 import android.content.Intent
+import android.content.res.Resources
+import android.graphics.Color
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -37,6 +42,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // 设置状态栏占位高度
+        val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+        val statusBarHeight = getStatusBarHeight()
+        statusBarPlaceholder.layoutParams.height = statusBarHeight
+
         val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -45,7 +55,14 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
 
-        navigationView.menu.findItem(R.id.nav_version)?.title = "版本 ${BuildConfig.VERSION_NAME}"
+        // 版本号灰色小字
+        val versionItem = navigationView.menu.findItem(R.id.nav_version)
+        val versionText = "版本 ${BuildConfig.VERSION_NAME}"
+        val sp = SpannableString(versionText).apply {
+            setSpan(ForegroundColorSpan(Color.GRAY), 0, length, 0)
+            setSpan(AbsoluteSizeSpan(12, true), 0, length, 0)
+        }
+        versionItem?.title = sp
 
         toolbar.setNavigationOnClickListener {
             if (drawerLayout.isDrawerOpen(Gravity.LEFT)) {
@@ -108,6 +125,11 @@ class MainActivity : AppCompatActivity() {
         NetworkStateHolder.isConnected.observe(this, Observer { connected ->
             networkBar.visibility = if (connected) View.GONE else View.VISIBLE
         })
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     private fun recoverLegacyChats() {
