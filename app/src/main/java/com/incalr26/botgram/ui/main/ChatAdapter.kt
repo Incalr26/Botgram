@@ -47,6 +47,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         } else {
             chat.title ?: "未命名群组"
         }
+        // 同步设置所有文本
         holder.chatName.text = name
         holder.chatTypeLabel.text = when (chat.type) {
             "private" -> "私聊"
@@ -55,44 +56,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             "channel" -> "频道"
             else -> chat.type
         }
-
-        val currentChatId = chat.chatId
-        holder.boundChatId = currentChatId
-
-        // 首字母作为 fallback
-        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        holder.avatarFallback.text = fallback
-        holder.avatarFallback.visibility = View.VISIBLE
-        holder.avatarImage.visibility = View.GONE
-
-        // 取消旧任务
-        holder.loadJob?.cancel()
-        holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            val avatarUrl = AvatarHelper.getAvatarUrl(chat.chatId)
-            if (holder.boundChatId == currentChatId) {
-                if (avatarUrl != null) {
-                    val request = ImageRequest.Builder(holder.itemView.context)
-                        .data(avatarUrl)
-                        .crossfade(true)
-                        .transformations(CircleCropTransformation())
-                        .target(holder.avatarImage)
-                        .listener(
-                            onSuccess = { _, _ ->
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatarImage.visibility = View.VISIBLE
-                            },
-                            onError = { _, _ ->
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatarImage.visibility = View.GONE
-                            }
-                        )
-                        .build()
-                    holder.itemView.context.imageLoader.enqueue(request)
-                }
-                // 若 avatarUrl 为 null，保持首字母
-            }
-        }
-
         holder.lastMessage.text = chat.lastMessage ?: ""
         if (chat.lastTime > 0) {
             val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -100,12 +63,45 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         } else {
             holder.lastTime.text = ""
         }
-
         if (chat.unreadCount > 0) {
             holder.unreadBadge.visibility = View.VISIBLE
             holder.unreadBadge.text = chat.unreadCount.toString()
         } else {
             holder.unreadBadge.visibility = View.GONE
+        }
+
+        // 头像初始状态
+        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        holder.avatarFallback.text = fallback
+        holder.avatarFallback.visibility = View.VISIBLE
+        holder.avatarImage.visibility = View.GONE
+
+        val currentChatId = chat.chatId
+        holder.boundChatId = currentChatId
+
+        // 异步加载头像
+        holder.loadJob?.cancel()
+        holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
+            val avatarUrl = AvatarHelper.getAvatarUrl(chat.chatId)
+            if (holder.boundChatId == currentChatId && avatarUrl != null) {
+                val request = ImageRequest.Builder(holder.itemView.context)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .transformations(CircleCropTransformation())
+                    .target(holder.avatarImage)
+                    .listener(
+                        onSuccess = { _, _ ->
+                            holder.avatarFallback.visibility = View.GONE
+                            holder.avatarImage.visibility = View.VISIBLE
+                        },
+                        onError = { _, _ ->
+                            holder.avatarFallback.visibility = View.VISIBLE
+                            holder.avatarImage.visibility = View.GONE
+                        }
+                    )
+                    .build()
+                holder.itemView.context.imageLoader.enqueue(request)
+            }
         }
     }
 

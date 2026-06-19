@@ -4,8 +4,6 @@ import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -13,36 +11,31 @@ import java.util.concurrent.ConcurrentHashMap
 object AvatarHelper {
 
     private val pendingRequests = ConcurrentHashMap<Long, CompletableDeferred<String?>>()
-    private val mutex = Mutex()
 
     private fun getToken(): String? {
         return BotApp.instance.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
             .getString("bot_token", null)
     }
 
-    /** 获取头像 URL，可能返回 null（无头像） */
     suspend fun getAvatarUrl(chatId: Long): String? {
-        // 1. 先查数据库缓存
         val repo = ChatRepository(BotApp.instance.databaseHelper)
+        // 读取缓存（包括 "none" 也读出来，但我们不会直接返回 null，而是忽略 "none"）
         val cached = withContext(Dispatchers.IO) { repo.getChatById(chatId)?.avatarUrl }
-        if (cached == "none") return null
-        if (!cached.isNullOrEmpty()) return cached
-
-        // 2. 检查是否有正在进行的请求
-        val existing = pendingRequests[chatId]
-        if (existing != null) {
-            return existing.await() // 挂起等待结果
+        if (cached != null && cached != "none" && cached.isNotEmpty()) {
+            return cached
         }
 
-        // 3. 创建新请求
+        // 检查进行中的请求
+        val existing = pendingRequests[chatId]
+        if (existing != null) {
+            return existing.await()
+        }
+
         val deferred = CompletableDeferred<String?>()
         pendingRequests[chatId] = deferred
 
         try {
-            val url = withContext(Dispatchers.IO) {
-                fetchAvatarUrl(chatId)
-            }
-            // 保存结果
+            val url = withContext(Dispatchers.IO) { fetchAvatarUrl(chatId) }
             withContext(Dispatchers.IO) {
                 repo.updateAvatarUrl(chatId, url ?: "none")
             }
