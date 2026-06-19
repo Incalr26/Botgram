@@ -1,6 +1,5 @@
 package com.incalr26.botgram.ui.main
 
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -9,7 +8,8 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
+import coil.imageLoader
+import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.ChatEntity
@@ -56,7 +56,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 初始状态：显示首字母，隐藏图片
+        // 初始显示首字母
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -67,43 +67,34 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
 
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
+            if (holder.boundChatId != currentChatId) return@launch
+
             val avatarUrl = when (chat.type) {
                 "private" -> AvatarHelper.getUserProfilePhotos(chat.chatId)
                 else -> AvatarHelper.getChatAvatarUrl(chat.chatId)
             }
 
-            if (holder.boundChatId != currentChatId) return@launch
-
-            when {
-                avatarUrl == null -> {
-                    // 网络错误，保持首字母
-                }
-                avatarUrl == "none" -> {
-                    // 确认无头像，保持首字母
-                }
-                avatarUrl.isNotEmpty() -> {
-                    // 有真实头像，加载
-                    holder.avatarImage.load(avatarUrl) {
-                        transformations(CircleCropTransformation())
-                        crossfade(true)
-                        listener(
-                            onSuccess = { _, _ ->
-                                if (holder.boundChatId == currentChatId) {
-                                    holder.avatarFallback.visibility = View.GONE
-                                    holder.avatarImage.visibility = View.VISIBLE
-                                }
-                            },
-                            onError = { _, _ ->
-                                // 加载失败，仍显示首字母
-                                if (holder.boundChatId == currentChatId) {
-                                    holder.avatarFallback.visibility = View.VISIBLE
-                                    holder.avatarImage.visibility = View.GONE
-                                }
+            if (avatarUrl != null && avatarUrl != "none") {
+                val request = ImageRequest.Builder(holder.itemView.context)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .transformations(CircleCropTransformation())
+                    .target(holder.avatarImage)
+                    .listener(
+                        onSuccess = { _, _ ->
+                            if (holder.boundChatId == currentChatId) {
+                                holder.avatarFallback.visibility = View.GONE
+                                holder.avatarImage.visibility = View.VISIBLE
                             }
-                        )
-                    }
-                }
+                        },
+                        onError = { _, _ ->
+                            // 保持首字母
+                        }
+                    )
+                    .build()
+                holder.itemView.context.imageLoader.enqueue(request)
             }
+            // 如果 avatarUrl 为 null 或 "none"，保持首字母
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""

@@ -1,99 +1,111 @@
 package com.incalr26.botgram.util
 
-import android.util.Log
+import android.content.Context
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.data.remote.ApiClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import okhttp3.Request
-import org.json.JSONException
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 object AvatarHelper {
 
+    // 内存缓存（进程级）
+    private val userPhotoCache = ConcurrentHashMap<Long, String?>()  // userId -> url / "none"
+    private val chatPhotoCache = ConcurrentHashMap<Long, String?>()
+    private val pendingUserRequests = ConcurrentHashMap<Long, CompletableDeferred<String?>>()
+    private val pendingChatRequests = ConcurrentHashMap<Long, CompletableDeferred<String?>>()
+
     private fun getToken(): String? {
-        return BotApp.instance.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
+        return BotApp.instance.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL。返回 null 表示网络错误或解析失败，返回 "none" 表示确认无头像，否则为图片 URL */
+    /** 获取用户头像 URL，返回 null 表示网络错误，返回 "none" 表示无头像 */
     suspend fun getUserProfilePhotos(userId: Long): String? {
-        val token = getToken()
-        if (token == null) {
-            Log.e("AvatarHelper", "Token is null")
-            return null
-        }
+        // 检查内存缓存
+        val cached = userPhotoCache[userId]
+        if (cached != null) return cached
 
+        val existing = pendingUserRequests[userId]
+        if (existing != null) return existing.await()
+
+        val deferred = CompletableDeferred<String?>()
+        pendingUserRequests[userId] = deferred
+        try {
+            val token = getToken() ?: run { deferred.complete(null); return null }
+            val result = withContext(Dispatchers.IO) { fetchUserPhoto(token, userId) }
+            userPhotoCache[userId] = result
+            deferred.complete(result)
+            return result
+        } catch (e: Exception) {
+            deferred.complete(null)
+            return null
+        } finally {
+            pendingUserRequests.remove(userId)
+        }
+    }
+
+    private suspend fun fetchUserPhoto(token: String, userId: Long): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 val body = response.body?.string()
-                if (!response.isSuccessful || body == null) {
-                    Log.e("AvatarHelper", "getUserProfilePhotos failed: ${response.code}")
-                    return@withContext null
-                }
+                if (!response.isSuccessful || body == null) return@withContext null
 
-                val json = try {
-                    JSONObject(body)
-                } catch (e: JSONException) {
-                    Log.e("AvatarHelper", "JSON parse error: $body", e)
-                    return@withContext null
-                }
-
-                if (!json.getBoolean("ok")) {
-                    Log.e("AvatarHelper", "API not ok: $body")
-                    return@withContext null
-                }
+                val json = JSONObject(body)
+                if (!json.getBoolean("ok")) return@withContext null
 
                 val result = json.getJSONObject("result")
-                // 检查 total_count
                 val totalCount = result.optInt("total_count", 0)
-                if (totalCount == 0) {
-                    Log.i("AvatarHelper", "User $userId has no profile photos")
-                    return@withContext "none"
-                }
+                if (totalCount == 0) return@withContext "none"
 
                 val photosArray = result.getJSONArray("photos")
-                if (photosArray.length() == 0) {
-                    return@withContext "none"
-                }
+                if (photosArray.length() == 0) return@withContext "none"
 
-                // photos 是数组的数组，取第一个元素（最近的照片），再取最大尺寸（最后一张）
+                // 取第一组照片（最近的头像）
                 val firstPhotoArray = photosArray.getJSONArray(0)
-                if (firstPhotoArray.length() == 0) {
-                    return@withContext "none"
-                }
+                if (firstPhotoArray.length() == 0) return@withContext "none"
 
-                // 获取最大尺寸（通常在数组末尾，但为了安全我们取最后一项）
-                val photoObj = firstPhotoArray.getJSONObject(firstPhotoArray.length() - 1)
+                // 取第一个尺寸（最小尺寸，加载最快）
+                val photoObj = firstPhotoArray.getJSONObject(0)
                 val fileId = photoObj.getString("file_id")
 
-                // 获取真实下载链接
                 val fileUrl = getFileUrl(token, fileId)
-                if (fileUrl == null) {
-                    Log.e("AvatarHelper", "Failed to get file URL for file_id: $fileId")
-                    return@withContext null
-                }
-
-                Log.i("AvatarHelper", "Got avatar URL for user $userId: $fileUrl")
-                return@withContext fileUrl
-            } catch (e: JSONException) {
-                Log.e("AvatarHelper", "JSON exception for user $userId", e)
-                return@withContext null
+                return@withContext fileUrl ?: null  // file 下载失败视为网络错误
             } catch (e: Exception) {
-                Log.e("AvatarHelper", "Exception for user $userId", e)
                 return@withContext null
             }
         }
     }
 
-    /** 获取群组/频道头像 URL。返回 null 表示错误，返回 "none" 表示无头像，否则为图片 URL */
+    /** 获取群组/频道头像 URL，返回 null 表示网络错误，返回 "none" 表示无头像 */
     suspend fun getChatAvatarUrl(chatId: Long): String? {
-        val token = getToken()
-        if (token == null) return null
+        val cached = chatPhotoCache[chatId]
+        if (cached != null) return cached
 
+        val existing = pendingChatRequests[chatId]
+        if (existing != null) return existing.await()
+
+        val deferred = CompletableDeferred<String?>()
+        pendingChatRequests[chatId] = deferred
+        try {
+            val token = getToken() ?: run { deferred.complete(null); return null }
+            val result = withContext(Dispatchers.IO) { fetchChatPhoto(token, chatId) }
+            chatPhotoCache[chatId] = result
+            deferred.complete(result)
+            return result
+        } catch (e: Exception) {
+            deferred.complete(null)
+            return null
+        } finally {
+            pendingChatRequests.remove(chatId)
+        }
+    }
+
+    private suspend fun fetchChatPhoto(token: String, chatId: Long): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
@@ -107,21 +119,14 @@ object AvatarHelper {
 
                 val result = json.getJSONObject("result")
                 val photo = result.optJSONObject("photo")
-                if (photo == null) {
-                    return@withContext "none"
-                }
+                if (photo == null) return@withContext "none"
 
-                // 取 small_file_id
                 val fileId = photo.optString("small_file_id")
                 if (fileId.isEmpty()) return@withContext null
 
                 val fileUrl = getFileUrl(token, fileId)
-                if (fileUrl == null) return@withContext null
-
-                Log.i("AvatarHelper", "Got chat avatar URL for $chatId: $fileUrl")
-                return@withContext fileUrl
+                return@withContext fileUrl ?: null
             } catch (e: Exception) {
-                Log.e("AvatarHelper", "Error getting chat avatar for $chatId", e)
                 return@withContext null
             }
         }
@@ -139,10 +144,10 @@ object AvatarHelper {
                 val json = JSONObject(body)
                 if (json.getBoolean("ok")) {
                     val filePath = json.getJSONObject("result").getString("file_path")
-                    "https://api.telegram.org/file/bot$token/$filePath"
-                } else null
+                    return@withContext "https://api.telegram.org/file/bot$token/$filePath"
+                } else return@withContext null
             } catch (e: Exception) {
-                null
+                return@withContext null
             }
         }
     }

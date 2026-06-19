@@ -9,7 +9,8 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
+import coil.imageLoader
+import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -70,31 +71,32 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
             if (userId != null) {
                 holder.loadJob?.cancel()
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-                    val avatarUrl = AvatarHelper.getUserProfilePhotos(userId)
                     if (holder.boundMessageId != currentMsgId) return@launch
 
-                    when {
-                        avatarUrl == null || avatarUrl == "none" -> {
-                            // 保持首字母
-                        }
-                        avatarUrl.isNotEmpty() -> {
-                            holder.avatar.load(avatarUrl) {
-                                transformations(CircleCropTransformation())
-                                crossfade(true)
-                                listener(
-                                    onSuccess = { _, _ ->
-                                        if (holder.boundMessageId == currentMsgId) {
-                                            holder.avatarFallback.visibility = View.GONE
-                                            holder.avatar.visibility = View.VISIBLE
-                                        }
-                                    },
-                                    onError = { _, _ ->
-                                        // 加载失败，保持首字母
+                    // 直接使用 getUserProfilePhotos，不再传 type 和 chatId
+                    val avatarUrl = AvatarHelper.getUserProfilePhotos(userId)
+
+                    if (avatarUrl != null && avatarUrl != "none") {
+                        val request = ImageRequest.Builder(holder.itemView.context)
+                            .data(avatarUrl)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(holder.avatar)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    if (holder.boundMessageId == currentMsgId) {
+                                        holder.avatarFallback.visibility = View.GONE
+                                        holder.avatar.visibility = View.VISIBLE
                                     }
-                                )
-                            }
-                        }
+                                },
+                                onError = { _, _ ->
+                                    // 保持首字母
+                                }
+                            )
+                            .build()
+                        holder.itemView.context.imageLoader.enqueue(request)
                     }
+                    // 如果 url 为 null 或 "none"，保持首字母
                 }
             }
         } else {

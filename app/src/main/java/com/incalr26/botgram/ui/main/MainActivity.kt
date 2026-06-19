@@ -19,7 +19,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
-import coil.load
+import coil.imageLoader
+import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.google.android.material.navigation.NavigationView
 import com.incalr26.botgram.BotApp
@@ -162,8 +163,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (_: Exception) {}
 
-                val avatarUrl = AvatarHelper.getUserProfilePhotos(botId)
-
                 withContext(Dispatchers.Main) {
                     val headerView = navigationView.getHeaderView(0)
                     headerView.findViewById<TextView>(R.id.botName).text = firstName
@@ -174,11 +173,15 @@ class MainActivity : AppCompatActivity() {
                     val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
                     fallbackView.text = firstName.take(1).uppercase()
 
+                    // 获取 Bot 头像
+                    val avatarUrl = AvatarHelper.getUserProfilePhotos(botId)
                     if (avatarUrl != null && avatarUrl != "none") {
-                        avatarView.load(avatarUrl) {
-                            transformations(CircleCropTransformation())
-                            crossfade(true)
-                            listener(
+                        val request = ImageRequest.Builder(this@MainActivity)
+                            .data(avatarUrl)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(avatarView)
+                            .listener(
                                 onSuccess = { _, _ ->
                                     fallbackView.visibility = View.GONE
                                     avatarView.visibility = View.VISIBLE
@@ -188,7 +191,8 @@ class MainActivity : AppCompatActivity() {
                                     avatarView.visibility = View.GONE
                                 }
                             )
-                        }
+                            .build()
+                        imageLoader.enqueue(request)
                     } else {
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
