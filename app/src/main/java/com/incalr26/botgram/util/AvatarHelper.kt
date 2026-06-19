@@ -1,8 +1,6 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -21,8 +19,7 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL（getUserProfilePhotos） */
-    suspend fun getUserAvatarUrl(userId: Long): String? {
+    private suspend fun getUserProfilePhotos(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
         return withContext(Dispatchers.IO) {
@@ -39,31 +36,6 @@ object AvatarHelper {
                                 val fileId = firstPhoto.getJSONObject(0).getString("file_id")
                                 getFileUrl(token, fileId)
                             } else null
-                        } else null
-                    } else null
-                } else null
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
-    /** 获取群组/频道头像 URL（getChat） */
-    suspend fun getChatAvatarUrl(chatId: Long): String? {
-        val token = getToken() ?: return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
-                val request = Request.Builder().url(url).build()
-                val response = ApiClient.getClient().newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "")
-                    if (json.getBoolean("ok")) {
-                        val chatObj = json.getJSONObject("result")
-                        val photo = chatObj.optJSONObject("photo")
-                        if (photo != null) {
-                            val fileId = photo.getString("small_file_id")
-                            getFileUrl(token, fileId)
                         } else null
                     } else null
                 } else null
@@ -92,64 +64,59 @@ object AvatarHelper {
         }
     }
 
-    /** 加载头像并回调，主线程安全 */
+    private suspend fun getGroupAvatarUrl(chatId: Long): String? {
+        val repo = ChatRepository(BotApp.instance.databaseHelper)
+        val chat = repo.getChatById(chatId)
+        if (chat?.avatarUrl != null) return chat.avatarUrl
+
+        val token = getToken() ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
+                val request = Request.Builder().url(url).build()
+                val response = ApiClient.getClient().newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    if (json.getBoolean("ok")) {
+                        val chatObj = json.getJSONObject("result")
+                        val photo = chatObj.optJSONObject("photo")
+                        if (photo != null) {
+                            val fileId = photo.getString("small_file_id")
+                            val fileUrl = getFileUrl(token, fileId)
+                            if (fileUrl != null) {
+                                repo.updateAvatarUrl(chatId, fileUrl)
+                                // 返回文件 URL
+                                fileUrl
+                            } else null
+                        } else null
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     suspend fun loadInto(
         imageView: android.widget.ImageView,
         userId: Long?,
         chatId: Long,
-        type: String,
-        onHasAvatar: (() -> Unit)? = null,
-        onNoAvatar: (() -> Unit)? = null,
-        onNetworkError: (() -> Unit)? = null
+        type: String
     ) {
         val context = imageView.context
-        val repo = ChatRepository(BotApp.instance.databaseHelper)
-
-        val chat = repo.getChatById(chatId)
-        val cachedUrl = chat?.avatarUrl
-
-        if (cachedUrl == "none") {
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
-            return
-        } else if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
-            return
-        }
-
-        val url = when (type) {
-            "private" -> if (userId != null) getUserAvatarUrl(userId) else null
-            "group", "supergroup" -> getChatAvatarUrl(chatId)
+        val url: String? = when (type) {
+            "private" -> if (userId != null) getUserProfilePhotos(userId) else null
+            "group", "supergroup" -> getGroupAvatarUrl(chatId)
             else -> null
         }
 
-        if (url != null) {
-            repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url, onHasAvatar, onNetworkError)
-        } else {
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
-        }
-    }
-
-    private fun loadUrl(
-        context: Context,
-        imageView: android.widget.ImageView,
-        url: String,
-        onSuccess: (() -> Unit)?,
-        onError: (() -> Unit)?
-    ) {
         val request = ImageRequest.Builder(context)
             .data(url)
             .crossfade(true)
             .transformations(CircleCropTransformation())
+            .placeholder(android.R.drawable.ic_menu_report_image)
+            .error(android.R.drawable.ic_menu_report_image)
             .target(imageView)
-            .listener(
-                onSuccess = { _, _ ->
-                    Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
-                },
-                onError = { _, _ ->
-                    Handler(Looper.getMainLooper()).post { onError?.invoke() }
-                }
-            )
             .build()
         context.imageLoader.enqueue(request)
     }

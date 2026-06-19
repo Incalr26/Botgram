@@ -21,7 +21,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: ImageView = view.findViewById(R.id.avatar)
-        val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val senderName: TextView = view.findViewById(R.id.senderName)
         val messageText: TextView = view.findViewById(R.id.messageText)
         val container: LinearLayout = view as LinearLayout
@@ -38,40 +37,29 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
-            holder.avatarFallback.visibility = View.GONE
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_RTL
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
         } else {
-            val senderName = message.senderName ?: "?"
-            val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-            holder.avatarFallback.text = fallback
-            holder.avatarFallback.visibility = View.VISIBLE
-            holder.avatar.visibility = View.GONE
-
+            holder.avatar.visibility = View.VISIBLE
             val userId = message.senderUserId
+            val chatId = message.chatId
             if (userId != null) {
                 CoroutineScope(Dispatchers.Main).launch {
-                    AvatarHelper.loadInto(
-                        holder.avatar, userId, message.chatId, "private",
-                        onHasAvatar = {
-                            holder.avatarFallback.visibility = View.GONE
-                            holder.avatar.visibility = View.VISIBLE
-                        },
-                        onNoAvatar = {
-                            holder.avatarFallback.visibility = View.VISIBLE
-                            holder.avatar.visibility = View.GONE
-                        },
-                        onNetworkError = {}
-                    )
+                    AvatarHelper.loadInto(holder.avatar, userId, chatId, "private")
                 }
+            } else {
+                holder.avatar.setImageResource(android.R.drawable.ic_menu_report_image)
             }
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
         }
 
         holder.senderName.text = message.senderName ?: "未知"
+
+        // 格式化文本（支持 entities）
         val rawText = message.text ?: ""
-        holder.messageText.text = MessageFormatter.format(rawText, message.entities)
+        val formatted = MessageFormatter.format(rawText, message.entities)
+        holder.messageText.text = formatted
     }
 
     class DiffCallback : DiffUtil.ItemCallback<MessageEntity>() {

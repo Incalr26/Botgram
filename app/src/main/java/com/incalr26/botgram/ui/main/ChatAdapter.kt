@@ -20,7 +20,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatarImage: ImageView = view.findViewById(R.id.avatarImage)
-        val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val chatName: TextView = view.findViewById(R.id.chatName)
         val chatTypeLabel: TextView = view.findViewById(R.id.chatTypeLabel)
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
@@ -42,6 +41,8 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             chat.title ?: "未命名群组"
         }
         holder.chatName.text = name
+
+        // 显示聊天类型
         holder.chatTypeLabel.text = when (chat.type) {
             "private" -> "私聊"
             "group" -> "群组"
@@ -50,30 +51,13 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        holder.avatarFallback.text = fallback
-        holder.avatarFallback.visibility = View.VISIBLE
-        holder.avatarImage.visibility = View.GONE
-
         val userId: Long? = if (chat.type == "private") chat.chatId else null
         CoroutineScope(Dispatchers.Main).launch {
-            AvatarHelper.loadInto(
-                holder.avatarImage, userId, chat.chatId, chat.type,
-                onHasAvatar = {
-                    holder.avatarFallback.visibility = View.GONE
-                    holder.avatarImage.visibility = View.VISIBLE
-                },
-                onNoAvatar = {
-                    holder.avatarFallback.visibility = View.VISIBLE
-                    holder.avatarImage.visibility = View.GONE
-                },
-                onNetworkError = {
-                    // 保持当前
-                }
-            )
+            AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
+
         if (chat.unreadCount > 0) {
             holder.unreadBadge.visibility = View.VISIBLE
             holder.unreadBadge.text = chat.unreadCount.toString()

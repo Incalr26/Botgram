@@ -24,8 +24,6 @@ class PollingService : Service() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
-    private var failureCount = 0
-    private val MAX_FAILURES = 3
 
     override fun onCreate() {
         super.onCreate()
@@ -57,9 +55,9 @@ class PollingService : Service() {
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 if (response.isSuccessful) {
-                    failureCount = 0
+                    // 只要成功响应，网络即正常
                     NetworkStateHolder.updateState(true)
-                    val body = response.body?.string() ?: continue
+                    val body = response.body?.string() ?: ""
                     val json = JSONObject(body)
                     if (json.getBoolean("ok")) {
                         val results = json.getJSONArray("result")
@@ -74,20 +72,13 @@ class PollingService : Service() {
                         }
                     }
                 } else {
-                    handleFailure()
+                    NetworkStateHolder.updateState(false)
                 }
                 delay(1000)
             } catch (e: Exception) {
-                handleFailure()
+                NetworkStateHolder.updateState(false)
                 delay(5000)
             }
-        }
-    }
-
-    private fun handleFailure() {
-        failureCount++
-        if (failureCount >= MAX_FAILURES) {
-            NetworkStateHolder.updateState(false)
         }
     }
 
@@ -106,7 +97,6 @@ class PollingService : Service() {
             msg.getJSONArray("entities").toString()
         } else null
 
-        // 获取现有聊天（如果存在），保留其 avatarUrl
         val existingChat = chatRepository.getChatById(chatId)
         val existingAvatarUrl = existingChat?.avatarUrl
 
@@ -120,7 +110,7 @@ class PollingService : Service() {
             lastMessage = messageText,
             lastTime = date,
             unreadCount = 1,
-            avatarUrl = existingAvatarUrl  // 保留原有头像缓存
+            avatarUrl = existingAvatarUrl
         )
 
         chatRepository.insertOrUpdateChat(chatEntity)

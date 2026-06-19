@@ -162,17 +162,7 @@ class MainActivity : AppCompatActivity() {
                     val botChat = repo.getChatById(botId)
                     val cachedUrl = botChat?.avatarUrl
                     if (!cachedUrl.isNullOrEmpty()) {
-                        AvatarHelper.loadInto(avatarView, botId, botId, "private",
-                            onHasAvatar = {
-                                fallbackView.visibility = View.GONE
-                                avatarView.visibility = View.VISIBLE
-                            },
-                            onNoAvatar = {
-                                fallbackView.visibility = View.VISIBLE
-                                avatarView.visibility = View.GONE
-                            },
-                            onNetworkError = {}
-                        )
+                        AvatarHelper.loadWithCoil(this@MainActivity, avatarView, fallbackView, cachedUrl)
                     } else {
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
@@ -181,17 +171,7 @@ class MainActivity : AppCompatActivity() {
                             if (url != null) {
                                 repo.updateAvatarUrl(botId, url)
                                 withContext(Dispatchers.Main) {
-                                    AvatarHelper.loadInto(avatarView, botId, botId, "private",
-                                        onHasAvatar = {
-                                            fallbackView.visibility = View.GONE
-                                            avatarView.visibility = View.VISIBLE
-                                        },
-                                        onNoAvatar = {
-                                            fallbackView.visibility = View.VISIBLE
-                                            avatarView.visibility = View.GONE
-                                        },
-                                        onNetworkError = {}
-                                    )
+                                    AvatarHelper.loadWithCoil(this@MainActivity, avatarView, fallbackView, url)
                                 }
                             }
                         }

@@ -44,19 +44,16 @@
             android:layout_marginStart="8dp"
             android:hint="输入消息..." />
 
-        <com.google.android.material.button.MaterialButton
+        <ImageButton
             android:id="@+id/sendButton"
-            style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginStart="8dp"
-            app:icon="@android:drawable/ic_menu_send"
-            app:iconTint="?attr/colorOnPrimary"
-            app:backgroundTint="?attr/colorPrimary"
-            app:cornerRadius="24dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp" />
+            android:src="@android:drawable/ic_menu_send"
+            android:contentDescription="发送"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="?attr/colorPrimary"
+            android:tintMode="src_in"
+            android:scaleType="center" />
     </LinearLayout>
 </LinearLayout>
