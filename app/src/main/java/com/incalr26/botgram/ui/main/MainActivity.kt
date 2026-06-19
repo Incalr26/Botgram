@@ -19,8 +19,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
-import coil.imageLoader
-import coil.request.ImageRequest
+import coil.load
 import coil.transform.CircleCropTransformation
 import com.google.android.material.navigation.NavigationView
 import com.incalr26.botgram.BotApp
@@ -54,18 +53,13 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
 
-        // 主内容状态栏占位
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
-        // 菜单头部状态栏占位
         val headerView = navigationView.getHeaderView(0)
         val headerStatusBarSpace = headerView.findViewById<View>(R.id.statusBarSpace)
-        headerStatusBarSpace.post {
-            headerStatusBarSpace.layoutParams.height = getStatusBarHeight()
-        }
+        headerStatusBarSpace.post { headerStatusBarSpace.layoutParams.height = getStatusBarHeight() }
 
-        // 菜单底部留出导航栏高度
         navigationView.clipToPadding = false
         ViewCompat.setOnApplyWindowInsetsListener(navigationView) { v, insets ->
             val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
@@ -73,33 +67,24 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        // 版本号灰色小字
         val versionItem = navigationView.menu.findItem(R.id.nav_version)
-        val versionText = "版本 ${BuildConfig.VERSION_NAME}"
-        val sp = SpannableString(versionText).apply {
+        val sp = SpannableString("版本 ${BuildConfig.VERSION_NAME}").apply {
             setSpan(ForegroundColorSpan(Color.GRAY), 0, length, 0)
             setSpan(AbsoluteSizeSpan(12, true), 0, length, 0)
         }
         versionItem?.title = sp
 
         toolbar.setNavigationOnClickListener {
-            if (drawerLayout.isDrawerOpen(Gravity.LEFT)) {
-                drawerLayout.closeDrawer(Gravity.LEFT)
-            } else {
-                drawerLayout.openDrawer(Gravity.LEFT)
-            }
+            if (drawerLayout.isDrawerOpen(Gravity.LEFT)) drawerLayout.closeDrawer(Gravity.LEFT)
+            else drawerLayout.openDrawer(Gravity.LEFT)
         }
 
         contentLayout.setOnTouchListener { v, event ->
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.x
-                    false
-                }
+                MotionEvent.ACTION_DOWN -> { downX = event.x; false }
                 MotionEvent.ACTION_MOVE -> {
                     if (!drawerLayout.isDrawerOpen(Gravity.LEFT)) {
-                        val dx = event.x - downX
-                        if (dx > 80) {
+                        if (event.x - downX > 80) {
                             drawerLayout.openDrawer(Gravity.LEFT)
                             return@setOnTouchListener true
                         }
@@ -116,21 +101,15 @@ class MainActivity : AppCompatActivity() {
 
         networkBar = findViewById(R.id.networkStatusBar)
         updateNetworkStatus()
-
         recoverLegacyChats()
         loadBotInfo()
 
         navigationView.setNavigationItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_add_chat -> {
-                    AddChatDialogFragment().show(supportFragmentManager, "AddChat")
-                }
-                R.id.nav_view_log -> {
-                    startActivity(Intent(this, LogViewerActivity::class.java))
-                }
+                R.id.nav_add_chat -> AddChatDialogFragment().show(supportFragmentManager, "AddChat")
+                R.id.nav_view_log -> startActivity(Intent(this, LogViewerActivity::class.java))
                 R.id.nav_logout -> {
-                    getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-                        .edit().remove("bot_token").apply()
+                    getSharedPreferences("botgram_prefs", MODE_PRIVATE).edit().remove("bot_token").apply()
                     stopService(Intent(this, com.incalr26.botgram.service.PollingService::class.java))
                     startActivity(Intent(this, LoginActivity::class.java))
                     finish()
@@ -146,14 +125,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resId > 0) resources.getDimensionPixelSize(resId) else 0
     }
 
     private fun recoverLegacyChats() {
         val db = BotApp.instance.databaseHelper.writableDatabase
-        val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-            .getString("bot_token", "") ?: ""
+        val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
         val newHash = token.hashCode().toString()
         db.execSQL("UPDATE ${com.incalr26.botgram.data.local.DatabaseHelper.TABLE_CHATS} SET ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = ? WHERE ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = 'legacy'", arrayOf(newHash))
     }
@@ -161,8 +139,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadBotInfo() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-                    .getString("bot_token", "") ?: return@launch
+                val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
                 val getMeUrl = "https://api.telegram.org/bot$token/getMe"
                 val meRequest = Request.Builder().url(getMeUrl).build()
                 val meResponse = ApiClient.getClient().newCall(meRequest).execute()
@@ -181,33 +158,27 @@ class MainActivity : AppCompatActivity() {
                     val descResponse = ApiClient.getClient().newCall(descRequest).execute()
                     if (descResponse.isSuccessful) {
                         val descJson = JSONObject(descResponse.body?.string() ?: "")
-                        if (descJson.getBoolean("ok")) {
-                            description = descJson.getJSONObject("result").optString("description", null)
-                        }
+                        if (descJson.getBoolean("ok")) description = descJson.getJSONObject("result").optString("description", null)
                     }
                 } catch (_: Exception) {}
+
+                val avatarUrl = AvatarHelper.getUserProfilePhotos(botId)
 
                 withContext(Dispatchers.Main) {
                     val headerView = navigationView.getHeaderView(0)
                     headerView.findViewById<TextView>(R.id.botName).text = firstName
-                    headerView.findViewById<TextView>(R.id.botUsername).text =
-                        if (username != null) "@$username" else "无用户名"
+                    headerView.findViewById<TextView>(R.id.botUsername).text = if (username != null) "@$username" else "无用户名"
                     headerView.findViewById<TextView>(R.id.botDescription).text = description ?: ""
 
                     val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
                     val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
-                    val fallback = firstName.take(1).uppercase()
-                    fallbackView.text = fallback
+                    fallbackView.text = firstName.take(1).uppercase()
 
-                    // 使用简化方法获取头像
-                    val url = AvatarHelper.getUserProfilePhotos(botId)
-                    if (url != null && url != "none") {
-                        val request = ImageRequest.Builder(this@MainActivity)
-                            .data(url)
-                            .crossfade(true)
-                            .transformations(CircleCropTransformation())
-                            .target(avatarView)
-                            .listener(
+                    if (avatarUrl != null && avatarUrl != "none") {
+                        avatarView.load(avatarUrl) {
+                            transformations(CircleCropTransformation())
+                            crossfade(true)
+                            listener(
                                 onSuccess = { _, _ ->
                                     fallbackView.visibility = View.GONE
                                     avatarView.visibility = View.VISIBLE
@@ -217,8 +188,7 @@ class MainActivity : AppCompatActivity() {
                                     avatarView.visibility = View.GONE
                                 }
                             )
-                            .build()
-                        imageLoader.enqueue(request)
+                        }
                     } else {
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
@@ -229,11 +199,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(navigationView)) {
-            drawerLayout.closeDrawer(navigationView)
-        } else {
-            super.onBackPressed()
-        }
+        if (drawerLayout.isDrawerOpen(navigationView)) drawerLayout.closeDrawer(navigationView)
+        else super.onBackPressed()
     }
 
     private fun updateNetworkStatus() {}

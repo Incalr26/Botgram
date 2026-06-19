@@ -9,8 +9,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.imageLoader
-import coil.request.ImageRequest
+import coil.load
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -44,7 +43,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
 
-        // 同步设置方向、背景和文本
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
             holder.avatarFallback.visibility = View.GONE
@@ -53,7 +51,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
-            // 先显示首字母
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -68,7 +65,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val timeStr = sdf.format(Date(message.date * 1000))
         holder.messageInfo.text = "ID:${message.messageId}  $timeStr"
 
-        // 异步加载头像
         if (!isOutgoing) {
             val userId = message.senderUserId
             if (userId != null) {
@@ -77,28 +73,27 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                     val avatarUrl = AvatarHelper.getUserProfilePhotos(userId)
                     if (holder.boundMessageId != currentMsgId) return@launch
 
-                    if (avatarUrl != null && avatarUrl != "none") {
-                        val request = ImageRequest.Builder(holder.itemView.context)
-                            .data(avatarUrl)
-                            .crossfade(true)
-                            .transformations(CircleCropTransformation())
-                            .target(holder.avatar)
-                            .listener(
-                                onSuccess = { _, _ ->
-                                    holder.avatarFallback.visibility = View.GONE
-                                    holder.avatar.visibility = View.VISIBLE
-                                },
-                                onError = { _, _ ->
-                                    holder.avatarFallback.visibility = View.VISIBLE
-                                    holder.avatar.visibility = View.GONE
-                                }
-                            )
-                            .build()
-                        holder.itemView.context.imageLoader.enqueue(request)
-                    } else {
-                        // 无头像或网络错误，保持首字母
-                        holder.avatarFallback.visibility = View.VISIBLE
-                        holder.avatar.visibility = View.GONE
+                    when {
+                        avatarUrl == null || avatarUrl == "none" -> {
+                            // 保持首字母
+                        }
+                        avatarUrl.isNotEmpty() -> {
+                            holder.avatar.load(avatarUrl) {
+                                transformations(CircleCropTransformation())
+                                crossfade(true)
+                                listener(
+                                    onSuccess = { _, _ ->
+                                        if (holder.boundMessageId == currentMsgId) {
+                                            holder.avatarFallback.visibility = View.GONE
+                                            holder.avatar.visibility = View.VISIBLE
+                                        }
+                                    },
+                                    onError = { _, _ ->
+                                        // 加载失败，保持首字母
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }

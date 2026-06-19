@@ -1,5 +1,6 @@
 package com.incalr26.botgram.ui.main
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,8 +9,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.imageLoader
-import coil.request.ImageRequest
+import coil.load
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.ChatEntity
@@ -56,7 +56,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 默认先显示首字母
+        // 初始状态：显示首字母，隐藏图片
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -74,30 +74,35 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
 
             if (holder.boundChatId != currentChatId) return@launch
 
-            if (avatarUrl != null && avatarUrl != "none") {
-                // 有真实头像，加载图片
-                val request = ImageRequest.Builder(holder.itemView.context)
-                    .data(avatarUrl)
-                    .crossfade(true)
-                    .transformations(CircleCropTransformation())
-                    .target(holder.avatarImage)
-                    .listener(
-                        onSuccess = { _, _ ->
-                            holder.avatarFallback.visibility = View.GONE
-                            holder.avatarImage.visibility = View.VISIBLE
-                        },
-                        onError = { _, _ ->
-                            // 加载失败，保持首字母
-                            holder.avatarFallback.visibility = View.VISIBLE
-                            holder.avatarImage.visibility = View.GONE
-                        }
-                    )
-                    .build()
-                holder.itemView.context.imageLoader.enqueue(request)
-            } else {
-                // 无头像或网络错误，保持首字母
-                holder.avatarFallback.visibility = View.VISIBLE
-                holder.avatarImage.visibility = View.GONE
+            when {
+                avatarUrl == null -> {
+                    // 网络错误，保持首字母
+                }
+                avatarUrl == "none" -> {
+                    // 确认无头像，保持首字母
+                }
+                avatarUrl.isNotEmpty() -> {
+                    // 有真实头像，加载
+                    holder.avatarImage.load(avatarUrl) {
+                        transformations(CircleCropTransformation())
+                        crossfade(true)
+                        listener(
+                            onSuccess = { _, _ ->
+                                if (holder.boundChatId == currentChatId) {
+                                    holder.avatarFallback.visibility = View.GONE
+                                    holder.avatarImage.visibility = View.VISIBLE
+                                }
+                            },
+                            onError = { _, _ ->
+                                // 加载失败，仍显示首字母
+                                if (holder.boundChatId == currentChatId) {
+                                    holder.avatarFallback.visibility = View.VISIBLE
+                                    holder.avatarImage.visibility = View.GONE
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
 
