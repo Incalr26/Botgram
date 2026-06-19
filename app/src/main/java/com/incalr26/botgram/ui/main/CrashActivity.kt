@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -16,6 +17,10 @@ class CrashActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_crash)
+
+        // 设置状态栏占位高度
+        val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+        statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
         val errorText = findViewById<TextView>(R.id.errorText)
         val copyButton = findViewById<Button>(R.id.copyButton)
@@ -51,5 +56,10 @@ class CrashActivity : AppCompatActivity() {
             }
             finish()
         }
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 }

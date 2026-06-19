@@ -56,9 +56,11 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
 
+        // 状态栏占位
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
+        // 菜单头部状态栏占位
         val headerView = navigationView.getHeaderView(0)
         val headerStatusBarSpace = headerView.findViewById<View>(R.id.statusBarSpace)
         headerStatusBarSpace.post { headerStatusBarSpace.layoutParams.height = getStatusBarHeight() }
@@ -70,6 +72,7 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        // 版本号灰色小字
         val versionItem = navigationView.menu.findItem(R.id.nav_version)
         val sp = SpannableString("版本 ${BuildConfig.VERSION_NAME}").apply {
             setSpan(ForegroundColorSpan(Color.GRAY), 0, length, 0)
@@ -130,25 +133,91 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun showAboutDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("关于 Botgram")
-            .setMessage("版本: ${BuildConfig.VERSION_NAME}\n\n" +
-                    "Telegram 频道: @Botgram_Channel\n" +
-                    "Telegram 群组: @Botgram_ChatGroup\n" +
-                    "GitHub: https://github.com/Incalr26/Botgram")
-            .setPositiveButton("确定", null)
-            .show()
-    }
-
     private fun getStatusBarHeight(): Int {
         val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
         return if (resId > 0) resources.getDimensionPixelSize(resId) else 0
     }
 
-    private fun recoverLegacyChats() { /* 不变，省略 */ }
+    private fun showAboutDialog() {
+        val message = "版本: ${BuildConfig.VERSION_NAME}\n\n" +
+                "Telegram 频道: https://t.me/Botgram_Channel\n" +
+                "Telegram 群组: https://t.me/Botgram_ChatGroup\n" +
+                "GitHub: https://github.com/Incalr26/Botgram"
+        AlertDialog.Builder(this)
+            .setTitle("关于 Botgram")
+            .setMessage(message)
+            .setPositiveButton("确定", null)
+            .show()
+    }
 
-    private fun loadBotInfo() { /* 不变，省略 */ }
+    private fun recoverLegacyChats() {
+        val db = BotApp.instance.databaseHelper.writableDatabase
+        val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
+        val newHash = token.hashCode().toString()
+        db.execSQL("UPDATE ${com.incalr26.botgram.data.local.DatabaseHelper.TABLE_CHATS} SET ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = ? WHERE ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = 'legacy'", arrayOf(newHash))
+    }
+
+    private fun loadBotInfo() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+                val getMeUrl = "https://api.telegram.org/bot$token/getMe"
+                val meRequest = Request.Builder().url(getMeUrl).build()
+                val meResponse = ApiClient.getClient().newCall(meRequest).execute()
+                if (!meResponse.isSuccessful) return@launch
+                val meJson = JSONObject(meResponse.body?.string() ?: "")
+                if (!meJson.getBoolean("ok")) return@launch
+                val bot = meJson.getJSONObject("result")
+                val botId = bot.getLong("id")
+                val firstName = bot.optString("first_name", "Bot")
+                val username = bot.optString("username", null)
+
+                var description: String? = null
+                try {
+                    val descUrl = "https://api.telegram.org/bot$token/getMyDescription"
+                    val descRequest = Request.Builder().url(descUrl).build()
+                    val descResponse = ApiClient.getClient().newCall(descRequest).execute()
+                    if (descResponse.isSuccessful) {
+                        val descJson = JSONObject(descResponse.body?.string() ?: "")
+                        if (descJson.getBoolean("ok")) description = descJson.getJSONObject("result").optString("description", null)
+                    }
+                } catch (_: Exception) {}
+
+                withContext(Dispatchers.Main) {
+                    val headerView = navigationView.getHeaderView(0)
+                    headerView.findViewById<TextView>(R.id.botName).text = firstName
+                    headerView.findViewById<TextView>(R.id.botUsername).text = if (username != null) "@$username" else "无用户名"
+                    headerView.findViewById<TextView>(R.id.botDescription).text = description ?: ""
+
+                    val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
+                    val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
+                    val fallback = firstName.take(1).uppercase()
+                    fallbackView.text = fallback
+
+                    val url = AvatarHelper.getUserAvatar(botId)
+                    if (!url.isNullOrEmpty()) {
+                        val request = ImageRequest.Builder(this@MainActivity)
+                            .data(url)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(avatarView)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    fallbackView.visibility = View.GONE
+                                    avatarView.visibility = View.VISIBLE
+                                },
+                                onError = { _, _ ->
+                                    fallbackView.visibility = View.VISIBLE
+                                    avatarView.visibility = View.GONE
+                                }
+                            )
+                            .build()
+                        imageLoader.enqueue(request)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
 
     override fun onBackPressed() {
         if (drawerLayout.isDrawerOpen(navigationView)) drawerLayout.closeDrawer(navigationView)
