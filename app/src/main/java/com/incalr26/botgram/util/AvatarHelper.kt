@@ -19,7 +19,7 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL，失败返回 null */
+    /** 获取用户头像 URL，使用 getUserProfilePhotos */
     suspend fun getUserAvatarUrl(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"

@@ -156,19 +156,16 @@ class MainActivity : AppCompatActivity() {
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
 
-                    // 加载 Bot 头像：先查缓存
                     val repo = com.incalr26.botgram.data.repository.ChatRepository(
                         BotApp.instance.databaseHelper
                     )
-                    val botChat = repo.getChatById(botId) // Bot 也是 private 类型
+                    val botChat = repo.getChatById(botId)
                     val cachedUrl = botChat?.avatarUrl
                     if (!cachedUrl.isNullOrEmpty()) {
                         AvatarHelper.loadWithCoil(this@MainActivity, avatarView, fallbackView, cachedUrl)
                     } else {
-                        // 初始显示首字符
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
-                        // 异步请求
                         launch(Dispatchers.IO) {
                             val url = AvatarHelper.getUserAvatarUrl(botId)
                             if (url != null) {
