@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_logout -> {
                     getSharedPreferences("botgram_prefs", MODE_PRIVATE).edit().remove("bot_token").apply()
                     stopService(Intent(this, com.incalr26.botgram.service.PollingService::class.java))
+                    AvatarHelper.clearCache()   // 清空头像缓存
                     startActivity(Intent(this, LoginActivity::class.java))
                     finish()
                 }
@@ -163,6 +164,9 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (_: Exception) {}
 
+                // 先在 IO 线程获取头像 URL
+                val avatarUrl = AvatarHelper.getUserAvatar(botId)
+
                 withContext(Dispatchers.Main) {
                     val headerView = navigationView.getHeaderView(0)
                     headerView.findViewById<TextView>(R.id.botName).text = firstName
@@ -175,8 +179,6 @@ class MainActivity : AppCompatActivity() {
                     fallbackView.visibility = View.VISIBLE
                     avatarView.visibility = View.GONE
 
-                    // 加载 Bot 头像
-                    val avatarUrl = AvatarHelper.getUserAvatar(botId)
                     if (!avatarUrl.isNullOrEmpty()) {
                         val request = ImageRequest.Builder(this@MainActivity)
                             .data(avatarUrl)

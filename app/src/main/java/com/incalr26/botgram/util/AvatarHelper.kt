@@ -11,16 +11,21 @@ import java.util.concurrent.ConcurrentHashMap
 
 object AvatarHelper {
 
-    private val cache = ConcurrentHashMap<Long, String?>() // userId / chatId -> avatarUrl
+    // 内存缓存：只有成功获取的 URL 才存入，null 代表未请求或失败
+    private val urlCache = ConcurrentHashMap<Long, String>()
+    // 记录已确认无头像的 ID，避免重复请求
+    private val noAvatarSet = ConcurrentHashMap.newKeySet<Long>()
 
     private fun token(): String? {
         return BotApp.instance.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL，返回 null 表示无法获取（网络错误或无头像） */
+    /** 获取用户头像 URL，返回 null 表示无头像或网络错误 */
     suspend fun getUserAvatar(userId: Long): String? {
-        cache[userId]?.let { return it }
+        if (noAvatarSet.contains(userId)) return null
+        urlCache[userId]?.let { return it }
+
         val t = token() ?: return null
         return withContext(Dispatchers.IO) {
             try {
@@ -30,13 +35,24 @@ object AvatarHelper {
                 val json = JSONObject(body)
                 if (!json.getBoolean("ok")) return@withContext null
 
-                val photos = json.getJSONObject("result").optJSONArray("photos") ?: return@withContext null
-                if (photos.length() == 0) return@withContext null
+                val photos = json.getJSONObject("result").optJSONArray("photos")
+                if (photos == null || photos.length() == 0) {
+                    noAvatarSet.add(userId)
+                    return@withContext null
+                }
 
-                val photo = photos.getJSONArray(0).getJSONObject(0)
-                val fileId = photo.getString("file_id")
+                val firstPhotoArray = photos.getJSONArray(0)
+                if (firstPhotoArray.length() == 0) {
+                    noAvatarSet.add(userId)
+                    return@withContext null
+                }
+
+                val photoObj = firstPhotoArray.getJSONObject(0)
+                val fileId = photoObj.getString("file_id")
                 val fileUrl = getFileUrl(t, fileId)
-                cache[userId] = fileUrl
+                if (fileUrl != null) {
+                    urlCache[userId] = fileUrl
+                }
                 fileUrl
             } catch (_: Exception) {
                 null
@@ -44,9 +60,11 @@ object AvatarHelper {
         }
     }
 
-    /** 获取群组/频道头像 URL，返回 null 表示无法获取 */
+    /** 获取群组/频道头像 URL，返回 null 表示无头像或网络错误 */
     suspend fun getChatAvatar(chatId: Long): String? {
-        cache[chatId]?.let { return it }
+        if (noAvatarSet.contains(chatId)) return null
+        urlCache[chatId]?.let { return it }
+
         val t = token() ?: return null
         return withContext(Dispatchers.IO) {
             try {
@@ -57,10 +75,20 @@ object AvatarHelper {
                 if (!json.getBoolean("ok")) return@withContext null
 
                 val result = json.getJSONObject("result")
-                val photo = result.optJSONObject("photo") ?: return@withContext null
-                val fileId = photo.optString("small_file_id", null) ?: return@withContext null
+                val photo = result.optJSONObject("photo")
+                if (photo == null) {
+                    noAvatarSet.add(chatId)
+                    return@withContext null
+                }
+
+                val fileId = photo.optString("small_file_id", null) ?: run {
+                    noAvatarSet.add(chatId)
+                    return@withContext null
+                }
                 val fileUrl = getFileUrl(t, fileId)
-                cache[chatId] = fileUrl
+                if (fileUrl != null) {
+                    urlCache[chatId] = fileUrl
+                }
                 fileUrl
             } catch (_: Exception) {
                 null
@@ -79,5 +107,11 @@ object AvatarHelper {
         } catch (_: Exception) {
             null
         }
+    }
+
+    /** 切换 Bot 时清空缓存 */
+    fun clearCache() {
+        urlCache.clear()
+        noAvatarSet.clear()
     }
 }
