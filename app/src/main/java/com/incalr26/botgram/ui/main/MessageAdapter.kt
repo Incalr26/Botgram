@@ -9,7 +9,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.imageLoader
+import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
@@ -52,12 +52,12 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
-            // 首字母默认可见
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
             holder.avatarFallback.visibility = View.VISIBLE
             holder.avatar.visibility = View.GONE
+            holder.avatar.setImageDrawable(null)
         }
 
         holder.senderName.text = message.senderName ?: "未知"
@@ -80,20 +80,23 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                             .data(avatarUrl)
                             .crossfade(true)
                             .transformations(CircleCropTransformation())
-                            .target(holder.avatar)
                             .listener(
-                                onSuccess = { _, _ ->
+                                onSuccess = { _, result ->
                                     if (holder.boundMessageId == currentMsgId) {
+                                        holder.avatar.setImageDrawable(result.drawable)
                                         holder.avatarFallback.visibility = View.GONE
                                         holder.avatar.visibility = View.VISIBLE
                                     }
                                 },
                                 onError = { _, _ ->
-                                    // 保持首字母
+                                    if (holder.boundMessageId == currentMsgId) {
+                                        holder.avatarFallback.visibility = View.VISIBLE
+                                        holder.avatar.visibility = View.GONE
+                                    }
                                 }
                             )
                             .build()
-                        holder.itemView.context.imageLoader.enqueue(request)
+                        Coil.imageLoader(holder.itemView.context).enqueue(request)
                     }
                 }
             }

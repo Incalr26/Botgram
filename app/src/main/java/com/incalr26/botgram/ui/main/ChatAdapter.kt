@@ -8,7 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import coil.imageLoader
+import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
@@ -56,11 +56,12 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 始终显示首字母，隐藏图片（初始状态）
+        // 初始显示首字母，隐藏图片
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
         holder.avatarImage.visibility = View.GONE
+        holder.avatarImage.setImageDrawable(null)  // 清除旧图
 
         val currentChatId = chat.chatId
         holder.boundChatId = currentChatId
@@ -79,20 +80,23 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
                     .data(avatarUrl)
                     .crossfade(true)
                     .transformations(CircleCropTransformation())
-                    .target(holder.avatarImage)
                     .listener(
-                        onSuccess = { _, _ ->
+                        onSuccess = { _, result ->
                             if (holder.boundChatId == currentChatId) {
+                                holder.avatarImage.setImageDrawable(result.drawable)
                                 holder.avatarFallback.visibility = View.GONE
                                 holder.avatarImage.visibility = View.VISIBLE
                             }
                         },
                         onError = { _, _ ->
-                            // 加载失败，保持首字母
+                            if (holder.boundChatId == currentChatId) {
+                                holder.avatarFallback.visibility = View.VISIBLE
+                                holder.avatarImage.visibility = View.GONE
+                            }
                         }
                     )
                     .build()
-                holder.itemView.context.imageLoader.enqueue(request)
+                Coil.imageLoader(holder.itemView.context).enqueue(request)
             }
             // 如果 avatarUrl 为 null 或空，保持首字母
         }
