@@ -171,9 +171,7 @@ class MainActivity : AppCompatActivity() {
                                 fallbackView.visibility = View.VISIBLE
                                 avatarView.visibility = View.GONE
                             },
-                            onNetworkError = {
-                                // 保持原样
-                            }
+                            onNetworkError = {}
                         )
                     } else {
                         fallbackView.visibility = View.VISIBLE
@@ -192,9 +190,7 @@ class MainActivity : AppCompatActivity() {
                                             fallbackView.visibility = View.VISIBLE
                                             avatarView.visibility = View.GONE
                                         },
-                                        onNetworkError = {
-                                            // 保持原样
-                                        }
+                                        onNetworkError = {}
                                     )
                                 }
                             }

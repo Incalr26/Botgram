@@ -7,13 +7,13 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.view.MenuItem
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -75,7 +75,7 @@ class ChatActivity : AppCompatActivity() {
             }
 
             val messageInput = findViewById<EditText>(R.id.messageInput)
-            val sendButton = findViewById<ImageButton>(R.id.sendButton)
+            val sendButton = findViewById<MaterialButton>(R.id.sendButton)
 
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()

@@ -50,7 +50,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 初始显示首字符
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -69,7 +68,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
                     holder.avatarImage.visibility = View.GONE
                 },
                 onNetworkError = {
-                    // 保持当前显示不变
+                    // 保持当前
                 }
             )
         }

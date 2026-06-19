@@ -2,8 +2,10 @@ package com.incalr26.botgram.data.remote
 
 import android.app.Application
 import com.incalr26.botgram.util.LogManager
+import com.incalr26.botgram.util.NetworkStateHolder
 import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -20,6 +22,17 @@ object ApiClient {
 
         client = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
+            .addInterceptor { chain ->
+                try {
+                    val response = chain.proceed(chain.request())
+                    // 任何成功的请求都视为网络正常
+                    NetworkStateHolder.updateState(true)
+                    response
+                } catch (e: IOException) {
+                    // 失败暂不修改状态，交给 PollingService 判断
+                    throw e
+                }
+            }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build()

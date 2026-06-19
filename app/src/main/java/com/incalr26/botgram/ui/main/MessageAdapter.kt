@@ -61,13 +61,9 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                             holder.avatarFallback.visibility = View.VISIBLE
                             holder.avatar.visibility = View.GONE
                         },
-                        onNetworkError = {
-                            // 保持当前显示
-                        }
+                        onNetworkError = {}
                     )
                 }
-            } else {
-                holder.avatarFallback.visibility = View.VISIBLE
             }
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
@@ -75,8 +71,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
         holder.senderName.text = message.senderName ?: "未知"
         val rawText = message.text ?: ""
-        val formatted = MessageFormatter.format(rawText, message.entities)
-        holder.messageText.text = formatted
+        holder.messageText.text = MessageFormatter.format(rawText, message.entities)
     }
 
     class DiffCallback : DiffUtil.ItemCallback<MessageEntity>() {

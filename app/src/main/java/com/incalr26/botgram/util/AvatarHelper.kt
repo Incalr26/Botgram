@@ -21,7 +21,7 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL（通过 getUserProfilePhotos） */
+    /** 获取用户头像 URL（getUserProfilePhotos） */
     suspend fun getUserAvatarUrl(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
@@ -48,7 +48,7 @@ object AvatarHelper {
         }
     }
 
-    /** 获取群组/频道头像 URL（通过 getChat） */
+    /** 获取群组/频道头像 URL（getChat） */
     suspend fun getChatAvatarUrl(chatId: Long): String? {
         val token = getToken() ?: return null
         return withContext(Dispatchers.IO) {
@@ -92,12 +92,7 @@ object AvatarHelper {
         }
     }
 
-    /**
-     * 加载头像，回调保证在主线程执行。
-     * - onHasAvatar: 成功获取到头像并显示
-     * - onNoAvatar: 确认无头像（API 返回空）
-     * - onNetworkError: 网络异常，保持原样
-     */
+    /** 加载头像并回调，主线程安全 */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
         userId: Long?,
@@ -110,7 +105,6 @@ object AvatarHelper {
         val context = imageView.context
         val repo = ChatRepository(BotApp.instance.databaseHelper)
 
-        // 1. 先从数据库缓存获取
         val chat = repo.getChatById(chatId)
         val cachedUrl = chat?.avatarUrl
 
@@ -118,29 +112,20 @@ object AvatarHelper {
             Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
             return
         } else if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            loadUrl(context, imageView, cachedUrl,
-                onSuccess = { onHasAvatar?.invoke() },
-                onError = { onNetworkError?.invoke() }
-            )
+            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
             return
         }
 
-        // 2. 没有缓存，请求 API
-        val url: String? = when (type) {
+        val url = when (type) {
             "private" -> if (userId != null) getUserAvatarUrl(userId) else null
             "group", "supergroup" -> getChatAvatarUrl(chatId)
             else -> null
         }
 
         if (url != null) {
-            // 成功获取到头像 URL，缓存并加载
             repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url,
-                onSuccess = { onHasAvatar?.invoke() },
-                onError = { onNetworkError?.invoke() }
-            )
+            loadUrl(context, imageView, url, onHasAvatar, onNetworkError)
         } else {
-            // 无头像
             Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
         }
     }
