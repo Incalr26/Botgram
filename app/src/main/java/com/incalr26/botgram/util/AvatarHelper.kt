@@ -1,6 +1,8 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -19,7 +21,7 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    /** 获取用户头像 URL，使用 getUserProfilePhotos */
+    /** 获取用户头像 URL（通过 getUserProfilePhotos） */
     suspend fun getUserAvatarUrl(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
@@ -46,7 +48,7 @@ object AvatarHelper {
         }
     }
 
-    /** 获取群组/频道头像 URL */
+    /** 获取群组/频道头像 URL（通过 getChat） */
     suspend fun getChatAvatarUrl(chatId: Long): String? {
         val token = getToken() ?: return null
         return withContext(Dispatchers.IO) {
@@ -90,12 +92,65 @@ object AvatarHelper {
         }
     }
 
-    /** 使用 Coil 加载头像，成功显示 ImageView，失败显示 fallback */
-    fun loadWithCoil(
+    /**
+     * 加载头像，回调保证在主线程执行。
+     * - onHasAvatar: 成功获取到头像并显示
+     * - onNoAvatar: 确认无头像（API 返回空）
+     * - onNetworkError: 网络异常，保持原样
+     */
+    suspend fun loadInto(
+        imageView: android.widget.ImageView,
+        userId: Long?,
+        chatId: Long,
+        type: String,
+        onHasAvatar: (() -> Unit)? = null,
+        onNoAvatar: (() -> Unit)? = null,
+        onNetworkError: (() -> Unit)? = null
+    ) {
+        val context = imageView.context
+        val repo = ChatRepository(BotApp.instance.databaseHelper)
+
+        // 1. 先从数据库缓存获取
+        val chat = repo.getChatById(chatId)
+        val cachedUrl = chat?.avatarUrl
+
+        if (cachedUrl == "none") {
+            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+            return
+        } else if (cachedUrl != null && cachedUrl.isNotEmpty()) {
+            loadUrl(context, imageView, cachedUrl,
+                onSuccess = { onHasAvatar?.invoke() },
+                onError = { onNetworkError?.invoke() }
+            )
+            return
+        }
+
+        // 2. 没有缓存，请求 API
+        val url: String? = when (type) {
+            "private" -> if (userId != null) getUserAvatarUrl(userId) else null
+            "group", "supergroup" -> getChatAvatarUrl(chatId)
+            else -> null
+        }
+
+        if (url != null) {
+            // 成功获取到头像 URL，缓存并加载
+            repo.updateAvatarUrl(chatId, url)
+            loadUrl(context, imageView, url,
+                onSuccess = { onHasAvatar?.invoke() },
+                onError = { onNetworkError?.invoke() }
+            )
+        } else {
+            // 无头像
+            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+        }
+    }
+
+    private fun loadUrl(
         context: Context,
         imageView: android.widget.ImageView,
-        fallbackView: android.widget.TextView,
-        url: String?
+        url: String,
+        onSuccess: (() -> Unit)?,
+        onError: (() -> Unit)?
     ) {
         val request = ImageRequest.Builder(context)
             .data(url)
@@ -104,12 +159,10 @@ object AvatarHelper {
             .target(imageView)
             .listener(
                 onSuccess = { _, _ ->
-                    fallbackView.visibility = android.view.View.GONE
-                    imageView.visibility = android.view.View.VISIBLE
+                    Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
                 },
                 onError = { _, _ ->
-                    fallbackView.visibility = android.view.View.VISIBLE
-                    imageView.visibility = android.view.View.GONE
+                    Handler(Looper.getMainLooper()).post { onError?.invoke() }
                 }
             )
             .build()

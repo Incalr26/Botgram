@@ -50,24 +50,24 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
             val userId = message.senderUserId
             if (userId != null) {
-                val repo = com.incalr26.botgram.data.repository.ChatRepository(
-                    com.incalr26.botgram.BotApp.instance.databaseHelper
-                )
                 CoroutineScope(Dispatchers.Main).launch {
-                    val chat = repo.getChatById(userId)
-                    val cachedUrl = chat?.avatarUrl
-                    if (!cachedUrl.isNullOrEmpty()) {
-                        AvatarHelper.loadWithCoil(holder.itemView.context, holder.avatar, holder.avatarFallback, cachedUrl)
-                    } else {
-                        val url = AvatarHelper.getUserAvatarUrl(userId)
-                        if (url != null) {
-                            repo.updateAvatarUrl(userId, url)
-                            if (holder.adapterPosition == position) {
-                                AvatarHelper.loadWithCoil(holder.itemView.context, holder.avatar, holder.avatarFallback, url)
-                            }
+                    AvatarHelper.loadInto(
+                        holder.avatar, userId, message.chatId, "private",
+                        onHasAvatar = {
+                            holder.avatarFallback.visibility = View.GONE
+                            holder.avatar.visibility = View.VISIBLE
+                        },
+                        onNoAvatar = {
+                            holder.avatarFallback.visibility = View.VISIBLE
+                            holder.avatar.visibility = View.GONE
+                        },
+                        onNetworkError = {
+                            // 保持当前显示
                         }
-                    }
+                    )
                 }
+            } else {
+                holder.avatarFallback.visibility = View.VISIBLE
             }
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)

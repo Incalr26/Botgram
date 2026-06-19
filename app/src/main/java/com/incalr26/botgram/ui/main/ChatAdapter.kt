@@ -50,32 +50,28 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
+        // 初始显示首字符
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
         holder.avatarImage.visibility = View.GONE
 
-        val avatarUrl = chat.avatarUrl
-        if (!avatarUrl.isNullOrEmpty()) {
-            AvatarHelper.loadWithCoil(holder.itemView.context, holder.avatarImage, holder.avatarFallback, avatarUrl)
-        } else {
-            val userId: Long? = if (chat.type == "private") chat.chatId else null
-            CoroutineScope(Dispatchers.Main).launch {
-                val url = when (chat.type) {
-                    "private" -> if (userId != null) AvatarHelper.getUserAvatarUrl(userId) else null
-                    "group", "supergroup" -> AvatarHelper.getChatAvatarUrl(chat.chatId)
-                    else -> null
+        val userId: Long? = if (chat.type == "private") chat.chatId else null
+        CoroutineScope(Dispatchers.Main).launch {
+            AvatarHelper.loadInto(
+                holder.avatarImage, userId, chat.chatId, chat.type,
+                onHasAvatar = {
+                    holder.avatarFallback.visibility = View.GONE
+                    holder.avatarImage.visibility = View.VISIBLE
+                },
+                onNoAvatar = {
+                    holder.avatarFallback.visibility = View.VISIBLE
+                    holder.avatarImage.visibility = View.GONE
+                },
+                onNetworkError = {
+                    // 保持当前显示不变
                 }
-                if (url != null) {
-                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
-                        com.incalr26.botgram.BotApp.instance.databaseHelper
-                    )
-                    repo.updateAvatarUrl(chat.chatId, url)
-                    if (holder.adapterPosition == position) {
-                        AvatarHelper.loadWithCoil(holder.itemView.context, holder.avatarImage, holder.avatarFallback, url)
-                    }
-                }
-            }
+            )
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
