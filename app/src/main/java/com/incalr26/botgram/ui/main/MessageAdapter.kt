@@ -61,26 +61,28 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
                 val userId = message.senderUserId
                 if (userId != null) {
-                    // 通过 AvatarHelper 加载用户头像
-                    AvatarHelper.loadInto(
-                        holder.avatar,
-                        chatId = userId,  // 私聊时 chatId 就是用户 ID
-                        onHasAvatar = {
-                            if (holder.boundMessageId == currentMsgId) {
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatar.visibility = View.VISIBLE
-                            }
-                        },
-                        onNoAvatar = {
-                            if (holder.boundMessageId == currentMsgId) {
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatar.visibility = View.GONE
-                            }
-                        },
-                        onNetworkError = {
-                            // 网络错误不改变 UI
+                    val avatarUrl = AvatarHelper.getAvatarUrl(userId)
+                    if (holder.boundMessageId == currentMsgId) {
+                        if (avatarUrl != null) {
+                            val request = ImageRequest.Builder(holder.itemView.context)
+                                .data(avatarUrl)
+                                .crossfade(true)
+                                .transformations(CircleCropTransformation())
+                                .target(holder.avatar)
+                                .listener(
+                                    onSuccess = { _, _ ->
+                                        holder.avatarFallback.visibility = View.GONE
+                                        holder.avatar.visibility = View.VISIBLE
+                                    },
+                                    onError = { _, _ ->
+                                        holder.avatarFallback.visibility = View.VISIBLE
+                                        holder.avatar.visibility = View.GONE
+                                    }
+                                )
+                                .build()
+                            holder.itemView.context.imageLoader.enqueue(request)
                         }
-                    )
+                    }
                 }
                 holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
                 holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)

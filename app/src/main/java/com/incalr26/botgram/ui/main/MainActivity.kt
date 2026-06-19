@@ -15,6 +15,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.google.android.material.navigation.NavigationView
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.BuildConfig
@@ -167,22 +170,27 @@ class MainActivity : AppCompatActivity() {
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
 
-                    // 使用新接口
-                    AvatarHelper.loadInto(
-                        imageView = avatarView,
-                        chatId = botId,
-                        onHasAvatar = {
-                            fallbackView.visibility = View.GONE
-                            avatarView.visibility = View.VISIBLE
-                        },
-                        onNoAvatar = {
-                            fallbackView.visibility = View.VISIBLE
-                            avatarView.visibility = View.GONE
-                        },
-                        onNetworkError = {
-                            // 保持原样
-                        }
-                    )
+                    // 加载头像
+                    val url = AvatarHelper.getAvatarUrl(botId)
+                    if (url != null) {
+                        val request = ImageRequest.Builder(this@MainActivity)
+                            .data(url)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(avatarView)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    fallbackView.visibility = View.GONE
+                                    avatarView.visibility = View.VISIBLE
+                                },
+                                onError = { _, _ ->
+                                    fallbackView.visibility = View.VISIBLE
+                                    avatarView.visibility = View.GONE
+                                }
+                            )
+                            .build()
+                        imageLoader.enqueue(request)
+                    }
                 }
             } catch (_: Exception) {}
         }

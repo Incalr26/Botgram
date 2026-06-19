@@ -8,6 +8,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.ChatEntity
 import com.incalr26.botgram.util.AvatarHelper
@@ -56,7 +59,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         val currentChatId = chat.chatId
         holder.boundChatId = currentChatId
 
-        // 初始显示首字符
+        // 首字母作为 fallback
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -65,25 +68,29 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         // 取消旧任务
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            AvatarHelper.loadInto(
-                holder.avatarImage,
-                chatId = chat.chatId,
-                onHasAvatar = {
-                    if (holder.boundChatId == currentChatId) {
-                        holder.avatarFallback.visibility = View.GONE
-                        holder.avatarImage.visibility = View.VISIBLE
-                    }
-                },
-                onNoAvatar = {
-                    if (holder.boundChatId == currentChatId) {
-                        holder.avatarFallback.visibility = View.VISIBLE
-                        holder.avatarImage.visibility = View.GONE
-                    }
-                },
-                onNetworkError = {
-                    // 网络错误不改变 UI
+            val avatarUrl = AvatarHelper.getAvatarUrl(chat.chatId)
+            if (holder.boundChatId == currentChatId) {
+                if (avatarUrl != null) {
+                    val request = ImageRequest.Builder(holder.itemView.context)
+                        .data(avatarUrl)
+                        .crossfade(true)
+                        .transformations(CircleCropTransformation())
+                        .target(holder.avatarImage)
+                        .listener(
+                            onSuccess = { _, _ ->
+                                holder.avatarFallback.visibility = View.GONE
+                                holder.avatarImage.visibility = View.VISIBLE
+                            },
+                            onError = { _, _ ->
+                                holder.avatarFallback.visibility = View.VISIBLE
+                                holder.avatarImage.visibility = View.GONE
+                            }
+                        )
+                        .build()
+                    holder.itemView.context.imageLoader.enqueue(request)
                 }
-            )
+                // 若 avatarUrl 为 null，保持首字母
+            }
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""

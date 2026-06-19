@@ -4,8 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:id="@+id/contentLayout"
@@ -45,7 +44,6 @@
         android:layout_width="300dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
-        android:fitsSystemWindows="true"
         android:background="@drawable/nav_background"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/navigation_menu"
