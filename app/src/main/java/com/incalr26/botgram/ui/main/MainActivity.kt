@@ -172,10 +172,12 @@ class MainActivity : AppCompatActivity() {
                     val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
                     val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
                     fallbackView.text = firstName.take(1).uppercase()
+                    fallbackView.visibility = View.VISIBLE
+                    avatarView.visibility = View.GONE
 
-                    // 获取 Bot 头像
-                    val avatarUrl = AvatarHelper.getUserProfilePhotos(botId)
-                    if (avatarUrl != null && avatarUrl != "none") {
+                    // 加载 Bot 头像
+                    val avatarUrl = AvatarHelper.getUserAvatar(botId)
+                    if (!avatarUrl.isNullOrEmpty()) {
                         val request = ImageRequest.Builder(this@MainActivity)
                             .data(avatarUrl)
                             .crossfade(true)
@@ -187,15 +189,11 @@ class MainActivity : AppCompatActivity() {
                                     avatarView.visibility = View.VISIBLE
                                 },
                                 onError = { _, _ ->
-                                    fallbackView.visibility = View.VISIBLE
-                                    avatarView.visibility = View.GONE
+                                    // 保持首字母
                                 }
                             )
                             .build()
                         imageLoader.enqueue(request)
-                    } else {
-                        fallbackView.visibility = View.VISIBLE
-                        avatarView.visibility = View.GONE
                     }
                 }
             } catch (_: Exception) {}

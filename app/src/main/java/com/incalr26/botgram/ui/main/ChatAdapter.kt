@@ -56,7 +56,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 初始显示首字母
+        // 始终显示首字母，隐藏图片（初始状态）
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -70,11 +70,11 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             if (holder.boundChatId != currentChatId) return@launch
 
             val avatarUrl = when (chat.type) {
-                "private" -> AvatarHelper.getUserProfilePhotos(chat.chatId)
-                else -> AvatarHelper.getChatAvatarUrl(chat.chatId)
+                "private" -> AvatarHelper.getUserAvatar(chat.chatId)
+                else -> AvatarHelper.getChatAvatar(chat.chatId)
             }
 
-            if (avatarUrl != null && avatarUrl != "none") {
+            if (!avatarUrl.isNullOrEmpty()) {
                 val request = ImageRequest.Builder(holder.itemView.context)
                     .data(avatarUrl)
                     .crossfade(true)
@@ -88,13 +88,13 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
                             }
                         },
                         onError = { _, _ ->
-                            // 保持首字母
+                            // 加载失败，保持首字母
                         }
                     )
                     .build()
                 holder.itemView.context.imageLoader.enqueue(request)
             }
-            // 如果 avatarUrl 为 null 或 "none"，保持首字母
+            // 如果 avatarUrl 为 null 或空，保持首字母
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""

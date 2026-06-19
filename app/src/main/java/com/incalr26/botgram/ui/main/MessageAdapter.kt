@@ -52,6 +52,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
+            // 首字母默认可见
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -73,10 +74,8 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
                     if (holder.boundMessageId != currentMsgId) return@launch
 
-                    // 直接使用 getUserProfilePhotos，不再传 type 和 chatId
-                    val avatarUrl = AvatarHelper.getUserProfilePhotos(userId)
-
-                    if (avatarUrl != null && avatarUrl != "none") {
+                    val avatarUrl = AvatarHelper.getUserAvatar(userId)
+                    if (!avatarUrl.isNullOrEmpty()) {
                         val request = ImageRequest.Builder(holder.itemView.context)
                             .data(avatarUrl)
                             .crossfade(true)
@@ -96,7 +95,6 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                             .build()
                         holder.itemView.context.imageLoader.enqueue(request)
                     }
-                    // 如果 url 为 null 或 "none"，保持首字母
                 }
             }
         } else {
