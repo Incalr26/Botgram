@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
-        // 菜单头部状态栏占位（post 确保布局完成）
+        // 菜单头部状态栏占位
         val headerView = navigationView.getHeaderView(0)
         val headerStatusBarSpace = headerView.findViewById<View>(R.id.statusBarSpace)
         headerStatusBarSpace.post {
@@ -199,21 +199,30 @@ class MainActivity : AppCompatActivity() {
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
 
-                    // 使用 loadInto 加载 Bot 头像
-                    AvatarHelper.loadInto(
-                        avatarView, botId, botId, "private",
-                        onHasAvatar = {
-                            fallbackView.visibility = View.GONE
-                            avatarView.visibility = View.VISIBLE
-                        },
-                        onNoAvatar = {
-                            fallbackView.visibility = View.VISIBLE
-                            avatarView.visibility = View.GONE
-                        },
-                        onNetworkError = {
-                            // 保持原样
-                        }
-                    )
+                    // 使用简化方法获取头像
+                    val url = AvatarHelper.getUserProfilePhotos(botId)
+                    if (url != null && url != "none") {
+                        val request = ImageRequest.Builder(this@MainActivity)
+                            .data(url)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(avatarView)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    fallbackView.visibility = View.GONE
+                                    avatarView.visibility = View.VISIBLE
+                                },
+                                onError = { _, _ ->
+                                    fallbackView.visibility = View.VISIBLE
+                                    avatarView.visibility = View.GONE
+                                }
+                            )
+                            .build()
+                        imageLoader.enqueue(request)
+                    } else {
+                        fallbackView.visibility = View.VISIBLE
+                        avatarView.visibility = View.GONE
+                    }
                 }
             } catch (_: Exception) {}
         }

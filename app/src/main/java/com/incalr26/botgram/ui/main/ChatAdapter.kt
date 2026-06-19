@@ -56,7 +56,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 初始显示首字符
+        // 默认先显示首字母
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
@@ -65,42 +65,39 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         val currentChatId = chat.chatId
         holder.boundChatId = currentChatId
 
-        // 异步加载头像
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            val url = when (chat.type) {
+            val avatarUrl = when (chat.type) {
                 "private" -> AvatarHelper.getUserProfilePhotos(chat.chatId)
                 else -> AvatarHelper.getChatAvatarUrl(chat.chatId)
             }
-            if (holder.boundChatId == currentChatId) {
-                when {
-                    url != null && url != "__NO_PHOTO__" -> {
-                        // 有真实头像
-                        val request = ImageRequest.Builder(holder.itemView.context)
-                            .data(url)
-                            .crossfade(true)
-                            .transformations(CircleCropTransformation())
-                            .target(holder.avatarImage)
-                            .listener(
-                                onSuccess = { _, _ ->
-                                    holder.avatarFallback.visibility = View.GONE
-                                    holder.avatarImage.visibility = View.VISIBLE
-                                },
-                                onError = { _, _ ->
-                                    // 加载失败，保持首字符
-                                    holder.avatarFallback.visibility = View.VISIBLE
-                                    holder.avatarImage.visibility = View.GONE
-                                }
-                            )
-                            .build()
-                        holder.itemView.context.imageLoader.enqueue(request)
-                    }
-                    else -> {
-                        // 无头像或网络错误，保持首字符
-                        holder.avatarFallback.visibility = View.VISIBLE
-                        holder.avatarImage.visibility = View.GONE
-                    }
-                }
+
+            if (holder.boundChatId != currentChatId) return@launch
+
+            if (avatarUrl != null && avatarUrl != "none") {
+                // 有真实头像，加载图片
+                val request = ImageRequest.Builder(holder.itemView.context)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .transformations(CircleCropTransformation())
+                    .target(holder.avatarImage)
+                    .listener(
+                        onSuccess = { _, _ ->
+                            holder.avatarFallback.visibility = View.GONE
+                            holder.avatarImage.visibility = View.VISIBLE
+                        },
+                        onError = { _, _ ->
+                            // 加载失败，保持首字母
+                            holder.avatarFallback.visibility = View.VISIBLE
+                            holder.avatarImage.visibility = View.GONE
+                        }
+                    )
+                    .build()
+                holder.itemView.context.imageLoader.enqueue(request)
+            } else {
+                // 无头像或网络错误，保持首字母
+                holder.avatarFallback.visibility = View.VISIBLE
+                holder.avatarImage.visibility = View.GONE
             }
         }
 

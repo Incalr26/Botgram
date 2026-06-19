@@ -53,7 +53,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
-            // 初始显示首字符
+            // 先显示首字母
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -74,34 +74,31 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
             if (userId != null) {
                 holder.loadJob?.cancel()
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-                    val url = AvatarHelper.getUserProfilePhotos(userId)
-                    if (holder.boundMessageId == currentMsgId) {
-                        when {
-                            url != null && url != "__NO_PHOTO__" -> {
-                                val request = ImageRequest.Builder(holder.itemView.context)
-                                    .data(url)
-                                    .crossfade(true)
-                                    .transformations(CircleCropTransformation())
-                                    .target(holder.avatar)
-                                    .listener(
-                                        onSuccess = { _, _ ->
-                                            holder.avatarFallback.visibility = View.GONE
-                                            holder.avatar.visibility = View.VISIBLE
-                                        },
-                                        onError = { _, _ ->
-                                            holder.avatarFallback.visibility = View.VISIBLE
-                                            holder.avatar.visibility = View.GONE
-                                        }
-                                    )
-                                    .build()
-                                holder.itemView.context.imageLoader.enqueue(request)
-                            }
-                            else -> {
-                                // 无头像或网络错误，保持首字符
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatar.visibility = View.GONE
-                            }
-                        }
+                    val avatarUrl = AvatarHelper.getUserProfilePhotos(userId)
+                    if (holder.boundMessageId != currentMsgId) return@launch
+
+                    if (avatarUrl != null && avatarUrl != "none") {
+                        val request = ImageRequest.Builder(holder.itemView.context)
+                            .data(avatarUrl)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(holder.avatar)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    holder.avatarFallback.visibility = View.GONE
+                                    holder.avatar.visibility = View.VISIBLE
+                                },
+                                onError = { _, _ ->
+                                    holder.avatarFallback.visibility = View.VISIBLE
+                                    holder.avatar.visibility = View.GONE
+                                }
+                            )
+                            .build()
+                        holder.itemView.context.imageLoader.enqueue(request)
+                    } else {
+                        // 无头像或网络错误，保持首字母
+                        holder.avatarFallback.visibility = View.VISIBLE
+                        holder.avatar.visibility = View.GONE
                     }
                 }
             }
