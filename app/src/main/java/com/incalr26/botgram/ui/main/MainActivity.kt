@@ -170,16 +170,13 @@ class MainActivity : AppCompatActivity() {
                             onNoAvatar = {
                                 fallbackView.visibility = View.VISIBLE
                                 avatarView.visibility = View.GONE
-                            },
-                            onNetworkError = {
-                                // 保持原样
                             }
                         )
                     } else {
                         fallbackView.visibility = View.VISIBLE
                         avatarView.visibility = View.GONE
                         launch(Dispatchers.IO) {
-                            val url = AvatarHelper.getUserProfilePhotos(botId)   // 使用现有方法名
+                            val url = AvatarHelper.getUserProfilePhotos(botId)
                             if (url != null) {
                                 repo.updateAvatarUrl(botId, url)
                                 withContext(Dispatchers.Main) {
@@ -191,9 +188,6 @@ class MainActivity : AppCompatActivity() {
                                         onNoAvatar = {
                                             fallbackView.visibility = View.VISIBLE
                                             avatarView.visibility = View.GONE
-                                        },
-                                        onNetworkError = {
-                                            // 保持原样
                                         }
                                     )
                                 }

@@ -21,7 +21,6 @@ object AvatarHelper {
             .getString("bot_token", null)
     }
 
-    /** 公共：获取用户头像 URL */
     suspend fun getUserProfilePhotos(userId: Long): String? {
         val token = getToken() ?: return null
         val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
@@ -48,7 +47,6 @@ object AvatarHelper {
         }
     }
 
-    /** 公共：获取群组头像 URL */
     suspend fun getChatAvatarUrl(chatId: Long): String? {
         val token = getToken() ?: return null
         return withContext(Dispatchers.IO) {
@@ -92,40 +90,35 @@ object AvatarHelper {
         }
     }
 
-    /** 统一加载入口，支持缓存与回调 */
+    /** 加载头像，仅回调有/无头像，网络错误时不改变 UI */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
         userId: Long?,
         chatId: Long,
         type: String,
         onHasAvatar: (() -> Unit)? = null,
-        onNoAvatar: (() -> Unit)? = null,
-        onNetworkError: (() -> Unit)? = null
+        onNoAvatar: (() -> Unit)? = null
     ) {
         val context = imageView.context
         val repo = ChatRepository(BotApp.instance.databaseHelper)
 
-        // 1. 查询缓存
         val chat = repo.getChatById(chatId)
         val cachedUrl = chat?.avatarUrl
 
         if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            // 有缓存直接加载，失败回调网络错误
-            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
+            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNoAvatar)
             return
         }
 
-        // 2. 无缓存，请求 API
-        val url: String? = when (type) {
+        val url = when (type) {
             "private" -> if (userId != null) getUserProfilePhotos(userId) else null
             "group", "supergroup" -> getChatAvatarUrl(chatId)
             else -> null
         }
 
         if (url != null) {
-            // 缓存结果
             repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url, onHasAvatar, onNetworkError)
+            loadUrl(context, imageView, url, onHasAvatar, onNoAvatar)
         } else {
             // 无头像
             Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
@@ -149,6 +142,7 @@ object AvatarHelper {
                     Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
                 },
                 onError = { _, _ ->
+                    // 网络错误时回调 onError，但不再改变 UI（即保持当前首字符）
                     Handler(Looper.getMainLooper()).post { onError?.invoke() }
                 }
             )

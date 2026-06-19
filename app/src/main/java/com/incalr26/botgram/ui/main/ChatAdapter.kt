@@ -11,9 +11,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.ChatEntity
 import com.incalr26.botgram.util.AvatarHelper
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -28,6 +26,8 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
         val lastTime: TextView = view.findViewById(R.id.lastTime)
         val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
+        var boundChatId: Long = 0L
+        var loadJob: Job? = null       // 用于取消旧的协程
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -53,60 +53,34 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-        holder.avatarFallback.text = fallback
-        holder.avatarFallback.visibility = View.VISIBLE
-        holder.avatarImage.visibility = View.GONE
+        val currentChatId = chat.chatId
+        holder.boundChatId = currentChatId
 
-        val avatarUrl = chat.avatarUrl
-        val userId: Long? = if (chat.type == "private") chat.chatId else null
+        // 取消该 ViewHolder 的上一次加载任务
+        holder.loadJob?.cancel()
+        holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
+            // 初始显示首字符
+            val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            holder.avatarFallback.text = fallback
+            holder.avatarFallback.visibility = View.VISIBLE
+            holder.avatarImage.visibility = View.GONE
 
-        CoroutineScope(Dispatchers.Main).launch {
-            if (!avatarUrl.isNullOrEmpty()) {
-                // 有缓存 URL，直接加载
-                AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type,
-                    onHasAvatar = {
+            val userId: Long? = if (chat.type == "private") chat.chatId else null
+            AvatarHelper.loadInto(
+                holder.avatarImage, userId, chat.chatId, chat.type,
+                onHasAvatar = {
+                    if (holder.boundChatId == currentChatId) {
                         holder.avatarFallback.visibility = View.GONE
                         holder.avatarImage.visibility = View.VISIBLE
-                    },
-                    onNoAvatar = {
+                    }
+                },
+                onNoAvatar = {
+                    if (holder.boundChatId == currentChatId) {
                         holder.avatarFallback.visibility = View.VISIBLE
                         holder.avatarImage.visibility = View.GONE
-                    },
-                    onNetworkError = {
-                        // 保持当前显示
-                    }
-                )
-            } else {
-                // 无缓存，请求 API
-                val url = when (chat.type) {
-                    "private" -> if (userId != null) AvatarHelper.getUserProfilePhotos(userId) else null
-                    "group", "supergroup" -> AvatarHelper.getChatAvatarUrl(chat.chatId)
-                    else -> null
-                }
-                if (url != null) {
-                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
-                        com.incalr26.botgram.BotApp.instance.databaseHelper
-                    )
-                    repo.updateAvatarUrl(chat.chatId, url)
-                    if (holder.adapterPosition == position) {
-                        AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type,
-                            onHasAvatar = {
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatarImage.visibility = View.VISIBLE
-                            },
-                            onNoAvatar = {
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatarImage.visibility = View.GONE
-                            },
-                            onNetworkError = {
-                                // 保持当前显示
-                            }
-                        )
                     }
                 }
-                // 如果 url 为 null，保持首字符显示
-            }
+            )
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
