@@ -9,6 +9,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.util.AvatarHelper
@@ -42,8 +45,10 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
 
+        // 取消上一个任务
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
+            // 设置左右方向及背景
             if (isOutgoing) {
                 holder.avatar.visibility = View.GONE
                 holder.avatarFallback.visibility = View.GONE
@@ -58,21 +63,32 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
                 val userId = message.senderUserId
                 if (userId != null) {
-                    AvatarHelper.loadInto(
-                        holder.avatar, userId, message.chatId, "private",
-                        onHasAvatar = {
-                            if (holder.boundMessageId == currentMsgId) {
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatar.visibility = View.VISIBLE
-                            }
-                        },
-                        onNoAvatar = {
-                            if (holder.boundMessageId == currentMsgId) {
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatar.visibility = View.GONE
-                            }
-                        }
-                    )
+                    // 直接请求用户头像 URL，不使用群组缓存
+                    val url = AvatarHelper.getUserProfilePhotos(userId)
+                    if (url != null) {
+                        val request = ImageRequest.Builder(holder.itemView.context)
+                            .data(url)
+                            .crossfade(true)
+                            .transformations(CircleCropTransformation())
+                            .target(holder.avatar)
+                            .listener(
+                                onSuccess = { _, _ ->
+                                    if (holder.boundMessageId == currentMsgId) {
+                                        holder.avatarFallback.visibility = View.GONE
+                                        holder.avatar.visibility = View.VISIBLE
+                                    }
+                                },
+                                onError = { _, _ ->
+                                    if (holder.boundMessageId == currentMsgId) {
+                                        holder.avatarFallback.visibility = View.VISIBLE
+                                        holder.avatar.visibility = View.GONE
+                                    }
+                                }
+                            )
+                            .build()
+                        holder.itemView.context.imageLoader.enqueue(request)
+                    }
+                    // 若 url 为 null，维持首字符
                 }
                 holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
                 holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
