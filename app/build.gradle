@@ -14,8 +14,8 @@ android {
         applicationId "com.incalr26.botgram"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "0.0.2-x22"
+        versionCode 3
+        versionName "0.0.3-a"
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
         buildConfigField "long", "BUILD_TIME_MILLIS", "${buildTimeMillis}L"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

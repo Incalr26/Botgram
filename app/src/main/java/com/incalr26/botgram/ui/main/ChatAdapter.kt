@@ -56,49 +56,50 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
-        // 初始显示首字母，隐藏图片
         val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
         holder.avatarFallback.text = fallback
         holder.avatarFallback.visibility = View.VISIBLE
         holder.avatarImage.visibility = View.GONE
-        holder.avatarImage.setImageDrawable(null)  // 清除旧图
+        holder.avatarImage.setImageDrawable(null)
 
         val currentChatId = chat.chatId
         holder.boundChatId = currentChatId
 
-        holder.loadJob?.cancel()
-        holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            if (holder.boundChatId != currentChatId) return@launch
+        // 检查设置是否开启真实头像
+        val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
+        val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
 
-            val avatarUrl = when (chat.type) {
-                "private" -> AvatarHelper.getUserAvatar(chat.chatId)
-                else -> AvatarHelper.getChatAvatar(chat.chatId)
-            }
+        if (useRealAvatar) {
+            holder.loadJob?.cancel()
+            holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
+                if (holder.boundChatId != currentChatId) return@launch
 
-            if (!avatarUrl.isNullOrEmpty()) {
-                val request = ImageRequest.Builder(holder.itemView.context)
-                    .data(avatarUrl)
-                    .crossfade(true)
-                    .transformations(CircleCropTransformation())
-                    .listener(
-                        onSuccess = { _, result ->
-                            if (holder.boundChatId == currentChatId) {
-                                holder.avatarImage.setImageDrawable(result.drawable)
-                                holder.avatarFallback.visibility = View.GONE
-                                holder.avatarImage.visibility = View.VISIBLE
+                val avatarUrl = when (chat.type) {
+                    "private" -> AvatarHelper.getUserAvatar(chat.chatId)
+                    else -> AvatarHelper.getChatAvatar(chat.chatId)
+                }
+
+                if (!avatarUrl.isNullOrEmpty()) {
+                    val request = ImageRequest.Builder(holder.itemView.context)
+                        .data(avatarUrl)
+                        .crossfade(true)
+                        .transformations(CircleCropTransformation())
+                        .listener(
+                            onSuccess = { _, result ->
+                                if (holder.boundChatId == currentChatId) {
+                                    holder.avatarImage.setImageDrawable(result.drawable)
+                                    holder.avatarFallback.visibility = View.GONE
+                                    holder.avatarImage.visibility = View.VISIBLE
+                                }
+                            },
+                            onError = { _, _ ->
+                                // 保持首字母
                             }
-                        },
-                        onError = { _, _ ->
-                            if (holder.boundChatId == currentChatId) {
-                                holder.avatarFallback.visibility = View.VISIBLE
-                                holder.avatarImage.visibility = View.GONE
-                            }
-                        }
-                    )
-                    .build()
-                Coil.imageLoader(holder.itemView.context).enqueue(request)
+                        )
+                        .build()
+                    Coil.imageLoader(holder.itemView.context).enqueue(request)
+                }
             }
-            // 如果 avatarUrl 为 null 或空，保持首字母
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""

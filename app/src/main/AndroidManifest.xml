@@ -6,8 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
@@ -37,7 +36,8 @@
         <activity
             android:name=".ui.main.ChatActivity"
             android:exported="false"
-            android:theme="@style/Theme.Botgram" />
+            android:theme="@style/Theme.Botgram"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.main.LogViewerActivity"
@@ -46,6 +46,11 @@
 
         <activity
             android:name=".ui.main.CrashActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Botgram" />
+
+        <activity
+            android:name=".ui.settings.SettingsActivity"
             android:exported="false"
             android:theme="@style/Theme.Botgram" />
 

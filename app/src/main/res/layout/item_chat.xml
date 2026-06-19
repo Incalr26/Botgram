@@ -56,19 +56,18 @@
                 android:textSize="12sp"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
-            <LinearLayout
+            <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
                 android:layout_marginTop="2dp">
 
                 <TextView
                     android:id="@+id/lastMessage"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:layout_toStartOf="@+id/lastTime"
                     android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -78,20 +77,29 @@
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
                     android:textColor="?attr/colorOnSurfaceVariant"
+                    android:layout_alignParentEnd="true"
                     android:layout_marginStart="8dp" />
-            </LinearLayout>
+            </RelativeLayout>
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/unreadBadge"
+        <!-- 未读红点悬浮在右上角，不影响时间位置 -->
+        <FrameLayout
             android:layout_width="wrap_content"
-            android:layout_height="24dp"
-            android:background="@drawable/badge_bg"
-            android:gravity="center"
-            android:minWidth="24dp"
-            android:padding="2dp"
-            android:textColor="?attr/colorOnError"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/unreadBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:background="@drawable/badge_bg"
+                android:gravity="center"
+                android:minWidth="24dp"
+                android:padding="2dp"
+                android:textColor="?attr/colorOnError"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
 </FrameLayout>

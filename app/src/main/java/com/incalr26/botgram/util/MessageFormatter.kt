@@ -33,9 +33,7 @@ object MessageFormatter {
                     }
                     "text_link" -> {
                         val url = entity.optString("url", null)
-                        if (url != null) {
-                            spannable.setSpan(URLSpan(url), offset, end, 0)
-                        }
+                        if (url != null) spannable.setSpan(URLSpan(url), offset, end, 0)
                     }
                     "url" -> {
                         val url = text.substring(offset, end)
@@ -50,7 +48,6 @@ object MessageFormatter {
                     "expandable_blockquote" -> {
                         spannable.setSpan(QuoteSpan(0x33666666), offset, end, 0)
                     }
-                    // 其他类型可忽略
                 }
             }
         } catch (_: Exception) {}

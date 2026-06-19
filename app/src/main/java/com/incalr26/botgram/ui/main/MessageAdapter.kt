@@ -67,7 +67,10 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val timeStr = sdf.format(Date(message.date * 1000))
         holder.messageInfo.text = "ID:${message.messageId}  $timeStr"
 
-        if (!isOutgoing) {
+        val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
+        val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
+
+        if (!isOutgoing && useRealAvatar) {
             val userId = message.senderUserId
             if (userId != null) {
                 holder.loadJob?.cancel()
@@ -89,10 +92,7 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
                                     }
                                 },
                                 onError = { _, _ ->
-                                    if (holder.boundMessageId == currentMsgId) {
-                                        holder.avatarFallback.visibility = View.VISIBLE
-                                        holder.avatar.visibility = View.GONE
-                                    }
+                                    // 保持首字母
                                 }
                             )
                             .build()
