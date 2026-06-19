@@ -1,10 +1,6 @@
 package com.incalr26.botgram.ui.main
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.net.ConnectivityManager
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
@@ -14,12 +10,15 @@ import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.lifecycle.Observer
 import com.google.android.material.navigation.NavigationView
+import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.BuildConfig
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.ui.login.LoginActivity
 import com.incalr26.botgram.util.AvatarHelper
+import com.incalr26.botgram.util.NetworkStateHolder
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -29,11 +28,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var navigationView: NavigationView
     private lateinit var contentLayout: View
-    private val networkReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            updateNetworkStatus()
-        }
-    }
     private var downX = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +79,7 @@ class MainActivity : AppCompatActivity() {
         networkBar = findViewById(R.id.networkStatusBar)
         updateNetworkStatus()
 
+        recoverLegacyChats()
         loadBotInfo()
 
         navigationView.setNavigationItemSelectedListener { item ->
@@ -106,6 +101,18 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.closeDrawers()
             true
         }
+
+        NetworkStateHolder.isConnected.observe(this, Observer { connected ->
+            networkBar.visibility = if (connected) View.GONE else View.VISIBLE
+        })
+    }
+
+    private fun recoverLegacyChats() {
+        val db = BotApp.instance.databaseHelper.writableDatabase
+        val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+            .getString("bot_token", "") ?: ""
+        val newHash = token.hashCode().toString()
+        db.execSQL("UPDATE ${com.incalr26.botgram.data.local.DatabaseHelper.TABLE_CHATS} SET ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = ? WHERE ${com.incalr26.botgram.data.local.DatabaseHelper.COL_ACCOUNT_HASH} = 'legacy'", arrayOf(newHash))
     }
 
     private fun loadBotInfo() {
@@ -113,28 +120,88 @@ class MainActivity : AppCompatActivity() {
             try {
                 val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
                     .getString("bot_token", "") ?: return@launch
-                val url = "https://api.telegram.org/bot$token/getMe"
-                val request = Request.Builder().url(url).build()
-                val response = ApiClient.getClient().newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "")
-                    if (json.getBoolean("ok")) {
-                        val bot = json.getJSONObject("result")
-                        val botId = bot.getLong("id")
-                        val firstName = bot.optString("first_name", "Bot")
-                        val username = bot.optString("username", null)
-                        withContext(Dispatchers.Main) {
-                            val headerView = navigationView.getHeaderView(0)
-                            headerView.findViewById<TextView>(R.id.botName).text = firstName
-                            headerView.findViewById<TextView>(R.id.botUsername).text =
-                                if (username != null) "@$username" else "无用户名"
+                val getMeUrl = "https://api.telegram.org/bot$token/getMe"
+                val meRequest = Request.Builder().url(getMeUrl).build()
+                val meResponse = ApiClient.getClient().newCall(meRequest).execute()
+                if (!meResponse.isSuccessful) return@launch
+                val meJson = JSONObject(meResponse.body?.string() ?: "")
+                if (!meJson.getBoolean("ok")) return@launch
+                val bot = meJson.getJSONObject("result")
+                val botId = bot.getLong("id")
+                val firstName = bot.optString("first_name", "Bot")
+                val username = bot.optString("username", null)
 
-                            val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
-                            AvatarHelper.loadInto(avatarView, botId, botId, "private")
+                var description: String? = null
+                try {
+                    val descUrl = "https://api.telegram.org/bot$token/getMyDescription"
+                    val descRequest = Request.Builder().url(descUrl).build()
+                    val descResponse = ApiClient.getClient().newCall(descRequest).execute()
+                    if (descResponse.isSuccessful) {
+                        val descJson = JSONObject(descResponse.body?.string() ?: "")
+                        if (descJson.getBoolean("ok")) {
+                            description = descJson.getJSONObject("result").optString("description", null)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                withContext(Dispatchers.Main) {
+                    val headerView = navigationView.getHeaderView(0)
+                    headerView.findViewById<TextView>(R.id.botName).text = firstName
+                    headerView.findViewById<TextView>(R.id.botUsername).text =
+                        if (username != null) "@$username" else "无用户名"
+                    headerView.findViewById<TextView>(R.id.botDescription).text = description ?: ""
+
+                    val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
+                    val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
+                    val fallback = firstName.take(1).uppercase()
+                    fallbackView.text = fallback
+
+                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
+                        BotApp.instance.databaseHelper
+                    )
+                    val botChat = repo.getChatById(botId)
+                    val cachedUrl = botChat?.avatarUrl
+                    if (!cachedUrl.isNullOrEmpty()) {
+                        AvatarHelper.loadInto(avatarView, botId, botId, "private",
+                            onHasAvatar = {
+                                fallbackView.visibility = View.GONE
+                                avatarView.visibility = View.VISIBLE
+                            },
+                            onNoAvatar = {
+                                fallbackView.visibility = View.VISIBLE
+                                avatarView.visibility = View.GONE
+                            },
+                            onNetworkError = {
+                                // 保持原样
+                            }
+                        )
+                    } else {
+                        fallbackView.visibility = View.VISIBLE
+                        avatarView.visibility = View.GONE
+                        launch(Dispatchers.IO) {
+                            val url = AvatarHelper.getUserProfilePhotos(botId)   // 使用现有方法名
+                            if (url != null) {
+                                repo.updateAvatarUrl(botId, url)
+                                withContext(Dispatchers.Main) {
+                                    AvatarHelper.loadInto(avatarView, botId, botId, "private",
+                                        onHasAvatar = {
+                                            fallbackView.visibility = View.GONE
+                                            avatarView.visibility = View.VISIBLE
+                                        },
+                                        onNoAvatar = {
+                                            fallbackView.visibility = View.VISIBLE
+                                            avatarView.visibility = View.GONE
+                                        },
+                                        onNetworkError = {
+                                            // 保持原样
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (_: Exception) {}
         }
     }
 
@@ -146,20 +213,5 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        registerReceiver(networkReceiver, IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-    }
-
-    override fun onPause() {
-        super.onPause()
-        unregisterReceiver(networkReceiver)
-    }
-
-    private fun updateNetworkStatus() {
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        val activeNetwork = cm.activeNetworkInfo
-        val connected = activeNetwork != null && activeNetwork.isConnected
-        networkBar.visibility = if (connected) View.GONE else View.VISIBLE
-    }
+    private fun updateNetworkStatus() {}
 }

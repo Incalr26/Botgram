@@ -16,13 +16,17 @@ import com.incalr26.botgram.util.MessageFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: ImageView = view.findViewById(R.id.avatar)
+        val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val senderName: TextView = view.findViewById(R.id.senderName)
         val messageText: TextView = view.findViewById(R.id.messageText)
+        val messageInfo: TextView = view.findViewById(R.id.messageInfo)
         val container: LinearLayout = view as LinearLayout
     }
 
@@ -37,29 +41,75 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
 
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
+            holder.avatarFallback.visibility = View.GONE
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_RTL
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
         } else {
-            holder.avatar.visibility = View.VISIBLE
+            val senderName = message.senderName ?: "?"
+            val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            holder.avatarFallback.text = fallback
+            holder.avatarFallback.visibility = View.VISIBLE
+            holder.avatar.visibility = View.GONE
+
             val userId = message.senderUserId
-            val chatId = message.chatId
             if (userId != null) {
+                val repo = com.incalr26.botgram.data.repository.ChatRepository(
+                    com.incalr26.botgram.BotApp.instance.databaseHelper
+                )
                 CoroutineScope(Dispatchers.Main).launch {
-                    AvatarHelper.loadInto(holder.avatar, userId, chatId, "private")
+                    // 尝试缓存
+                    val chat = repo.getChatById(userId)
+                    val cachedUrl = chat?.avatarUrl
+                    if (!cachedUrl.isNullOrEmpty()) {
+                        AvatarHelper.loadInto(holder.avatar, userId, message.chatId, "private",
+                            onHasAvatar = {
+                                holder.avatarFallback.visibility = View.GONE
+                                holder.avatar.visibility = View.VISIBLE
+                            },
+                            onNoAvatar = {
+                                holder.avatarFallback.visibility = View.VISIBLE
+                                holder.avatar.visibility = View.GONE
+                            },
+                            onNetworkError = {
+                                // 保持当前显示
+                            }
+                        )
+                    } else {
+                        // 请求头像
+                        val url = AvatarHelper.getUserProfilePhotos(userId)
+                        if (url != null) {
+                            repo.updateAvatarUrl(userId, url)
+                            if (holder.adapterPosition == position) {
+                                AvatarHelper.loadInto(holder.avatar, userId, message.chatId, "private",
+                                    onHasAvatar = {
+                                        holder.avatarFallback.visibility = View.GONE
+                                        holder.avatar.visibility = View.VISIBLE
+                                    },
+                                    onNoAvatar = {
+                                        holder.avatarFallback.visibility = View.VISIBLE
+                                        holder.avatar.visibility = View.GONE
+                                    },
+                                    onNetworkError = {
+                                        // 保持当前显示
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
-            } else {
-                holder.avatar.setImageResource(android.R.drawable.ic_menu_report_image)
             }
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
         }
 
         holder.senderName.text = message.senderName ?: "未知"
-
-        // 格式化文本（支持 entities）
         val rawText = message.text ?: ""
-        val formatted = MessageFormatter.format(rawText, message.entities)
-        holder.messageText.text = formatted
+        holder.messageText.text = MessageFormatter.format(rawText, message.entities)
+
+        // 时间精确到秒
+        val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        val timeStr = sdf.format(Date(message.date * 1000))
+        holder.messageInfo.text = "ID:${message.messageId}  $timeStr"
     }
 
     class DiffCallback : DiffUtil.ItemCallback<MessageEntity>() {

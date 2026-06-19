@@ -14,15 +14,19 @@ import com.incalr26.botgram.util.AvatarHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
     ListAdapter<ChatEntity, ChatAdapter.ViewHolder>(DiffCallback()) {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatarImage: ImageView = view.findViewById(R.id.avatarImage)
+        val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val chatName: TextView = view.findViewById(R.id.chatName)
         val chatTypeLabel: TextView = view.findViewById(R.id.chatTypeLabel)
         val lastMessage: TextView = view.findViewById(R.id.lastMessage)
+        val lastTime: TextView = view.findViewById(R.id.lastTime)
         val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
     }
 
@@ -41,8 +45,6 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             chat.title ?: "未命名群组"
         }
         holder.chatName.text = name
-
-        // 显示聊天类型
         holder.chatTypeLabel.text = when (chat.type) {
             "private" -> "私聊"
             "group" -> "群组"
@@ -51,12 +53,69 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
             else -> chat.type
         }
 
+        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        holder.avatarFallback.text = fallback
+        holder.avatarFallback.visibility = View.VISIBLE
+        holder.avatarImage.visibility = View.GONE
+
+        val avatarUrl = chat.avatarUrl
         val userId: Long? = if (chat.type == "private") chat.chatId else null
+
         CoroutineScope(Dispatchers.Main).launch {
-            AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type)
+            if (!avatarUrl.isNullOrEmpty()) {
+                // 有缓存 URL，直接加载
+                AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type,
+                    onHasAvatar = {
+                        holder.avatarFallback.visibility = View.GONE
+                        holder.avatarImage.visibility = View.VISIBLE
+                    },
+                    onNoAvatar = {
+                        holder.avatarFallback.visibility = View.VISIBLE
+                        holder.avatarImage.visibility = View.GONE
+                    },
+                    onNetworkError = {
+                        // 保持当前显示
+                    }
+                )
+            } else {
+                // 无缓存，请求 API
+                val url = when (chat.type) {
+                    "private" -> if (userId != null) AvatarHelper.getUserProfilePhotos(userId) else null
+                    "group", "supergroup" -> AvatarHelper.getChatAvatarUrl(chat.chatId)
+                    else -> null
+                }
+                if (url != null) {
+                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
+                        com.incalr26.botgram.BotApp.instance.databaseHelper
+                    )
+                    repo.updateAvatarUrl(chat.chatId, url)
+                    if (holder.adapterPosition == position) {
+                        AvatarHelper.loadInto(holder.avatarImage, userId, chat.chatId, chat.type,
+                            onHasAvatar = {
+                                holder.avatarFallback.visibility = View.GONE
+                                holder.avatarImage.visibility = View.VISIBLE
+                            },
+                            onNoAvatar = {
+                                holder.avatarFallback.visibility = View.VISIBLE
+                                holder.avatarImage.visibility = View.GONE
+                            },
+                            onNetworkError = {
+                                // 保持当前显示
+                            }
+                        )
+                    }
+                }
+                // 如果 url 为 null，保持首字符显示
+            }
         }
 
         holder.lastMessage.text = chat.lastMessage ?: ""
+        if (chat.lastTime > 0) {
+            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+            holder.lastTime.text = sdf.format(Date(chat.lastTime))
+        } else {
+            holder.lastTime.text = ""
+        }
 
         if (chat.unreadCount > 0) {
             holder.unreadBadge.visibility = View.VISIBLE
