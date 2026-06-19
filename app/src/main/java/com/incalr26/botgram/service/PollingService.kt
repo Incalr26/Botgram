@@ -13,6 +13,7 @@ import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import com.incalr26.botgram.data.repository.MessageRepository
+import com.incalr26.botgram.util.NetworkStateHolder
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -23,6 +24,8 @@ class PollingService : Service() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
+    private var failureCount = 0
+    private val MAX_FAILURES = 3
 
     override fun onCreate() {
         super.onCreate()
@@ -54,6 +57,8 @@ class PollingService : Service() {
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 if (response.isSuccessful) {
+                    failureCount = 0
+                    NetworkStateHolder.updateState(true)
                     val body = response.body?.string() ?: continue
                     val json = JSONObject(body)
                     if (json.getBoolean("ok")) {
@@ -68,11 +73,21 @@ class PollingService : Service() {
                             }
                         }
                     }
+                } else {
+                    handleFailure()
                 }
                 delay(1000)
             } catch (e: Exception) {
+                handleFailure()
                 delay(5000)
             }
+        }
+    }
+
+    private fun handleFailure() {
+        failureCount++
+        if (failureCount >= MAX_FAILURES) {
+            NetworkStateHolder.updateState(false)
         }
     }
 
@@ -86,28 +101,30 @@ class PollingService : Service() {
         val chatUsername = chatObj.optString("username", null)
         val date = msg.getLong("date") * 1000
 
-        // 处理系统消息或普通文本
         val messageText = extractMessageText(msg)
         val entitiesJson = if (msg.has("entities")) {
             msg.getJSONArray("entities").toString()
         } else null
 
-        // 更新会话
-        chatRepository.insertOrUpdateChat(
-            ChatEntity(
-                chatId = chatId,
-                type = chatType,
-                title = chatTitle,
-                firstName = chatFirstName,
-                lastName = chatLastName,
-                username = chatUsername,
-                lastMessage = messageText,
-                lastTime = date,
-                unreadCount = 1
-            )
+        // 获取现有聊天（如果存在），保留其 avatarUrl
+        val existingChat = chatRepository.getChatById(chatId)
+        val existingAvatarUrl = existingChat?.avatarUrl
+
+        val chatEntity = ChatEntity(
+            chatId = chatId,
+            type = chatType,
+            title = chatTitle,
+            firstName = chatFirstName,
+            lastName = chatLastName,
+            username = chatUsername,
+            lastMessage = messageText,
+            lastTime = date,
+            unreadCount = 1,
+            avatarUrl = existingAvatarUrl  // 保留原有头像缓存
         )
 
-        // 获取发送者信息
+        chatRepository.insertOrUpdateChat(chatEntity)
+
         val from = msg.optJSONObject("from")
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
@@ -127,14 +144,12 @@ class PollingService : Service() {
             )
         )
 
-        // 广播新消息
         val refreshIntent = Intent("com.incalr26.botgram.NEW_MESSAGE")
         refreshIntent.putExtra("chatId", chatId)
         sendBroadcast(refreshIntent)
     }
 
     private fun extractMessageText(msg: JSONObject): String? {
-        // 系统消息类型
         if (msg.has("new_chat_members")) {
             val members = msg.getJSONArray("new_chat_members")
             val names = mutableListOf<String>()
@@ -155,11 +170,7 @@ class PollingService : Service() {
         if (msg.has("new_chat_title")) {
             return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
         }
-
-        // 普通文本
         if (msg.has("text")) return msg.getString("text")
-
-        // 贴纸、图片等媒体
         if (msg.has("sticker")) {
             val sticker = msg.getJSONObject("sticker")
             val emoji = sticker.optString("emoji", "")
@@ -169,7 +180,6 @@ class PollingService : Service() {
         if (msg.has("document")) return "[文件]"
         if (msg.has("video")) return "[视频]"
         if (msg.has("audio") || msg.has("voice")) return "[语音]"
-
         return "[媒体消息]"
     }
 
