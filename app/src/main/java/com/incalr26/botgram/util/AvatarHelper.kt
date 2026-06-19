@@ -1,8 +1,6 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -10,44 +8,24 @@ import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONObject
 
 object AvatarHelper {
 
+    private val pendingRequests = mutableSetOf<Long>()
+    private val mutex = Mutex()
+
     private fun getToken(): String? {
         return BotApp.instance.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
             .getString("bot_token", null)
     }
 
-    suspend fun getUserProfilePhotos(userId: Long): String? {
-        val token = getToken() ?: return null
-        val url = "https://api.telegram.org/bot$token/getUserProfilePhotos?user_id=$userId&limit=1"
-        return withContext(Dispatchers.IO) {
-            try {
-                val request = Request.Builder().url(url).build()
-                val response = ApiClient.getClient().newCall(request).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "")
-                    if (json.getBoolean("ok")) {
-                        val photos = json.getJSONObject("result").getJSONArray("photos")
-                        if (photos.length() > 0) {
-                            val firstPhoto = photos.getJSONArray(0)
-                            if (firstPhoto.length() > 0) {
-                                val fileId = firstPhoto.getJSONObject(0).getString("file_id")
-                                getFileUrl(token, fileId)
-                            } else null
-                        } else null
-                    } else null
-                } else null
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
-
-    suspend fun getChatAvatarUrl(chatId: Long): String? {
+    /** 通过 getChat 获取任何聊天（用户/群组/频道）的头像 URL */
+    private suspend fun fetchChatAvatarUrl(chatId: Long): String? {
         val token = getToken() ?: return null
         return withContext(Dispatchers.IO) {
             try {
@@ -62,7 +40,7 @@ object AvatarHelper {
                         if (photo != null) {
                             val fileId = photo.getString("small_file_id")
                             getFileUrl(token, fileId)
-                        } else null
+                        } else null   // 无头像
                     } else null
                 } else null
             } catch (e: Exception) {
@@ -72,9 +50,9 @@ object AvatarHelper {
     }
 
     private suspend fun getFileUrl(token: String, fileId: String): String? {
-        val url = "https://api.telegram.org/bot$token/getFile?file_id=$fileId"
         return withContext(Dispatchers.IO) {
             try {
+                val url = "https://api.telegram.org/bot$token/getFile?file_id=$fileId"
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 if (response.isSuccessful) {
@@ -90,47 +68,67 @@ object AvatarHelper {
         }
     }
 
-    /** 加载头像，回调 onHasAvatar / onNoAvatar。无头像时缓存 "none" 避免重复请求 */
+    /**
+     * 加载头像，回调在主线程执行。
+     * - onHasAvatar: 成功显示头像
+     * - onNoAvatar: 确认无头像（已缓存 "none"）
+     * - onNetworkError: 网络异常，不改变 UI
+     */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
-        userId: Long?,
         chatId: Long,
-        type: String,
         onHasAvatar: (() -> Unit)? = null,
-        onNoAvatar: (() -> Unit)? = null
+        onNoAvatar: (() -> Unit)? = null,
+        onNetworkError: (() -> Unit)? = null
     ) {
         val context = imageView.context
         val repo = ChatRepository(BotApp.instance.databaseHelper)
 
-        val chat = repo.getChatById(chatId)
-        val cachedUrl = chat?.avatarUrl
+        // 1. 读取缓存（需在 IO 线程）
+        val cachedUrl = withContext(Dispatchers.IO) {
+            repo.getChatById(chatId)?.avatarUrl
+        }
 
-        // 已标记为无头像
+        // 2. 已标记无头像
         if (cachedUrl == "none") {
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+            withContext(Dispatchers.Main) { onNoAvatar?.invoke() }
             return
         }
 
-        // 有有效缓存，直接加载
+        // 3. 有有效缓存，直接加载
         if (cachedUrl != null && cachedUrl.isNotEmpty()) {
-            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNoAvatar)
+            loadUrl(context, imageView, cachedUrl, onHasAvatar, onNetworkError)
             return
         }
 
-        // 无缓存，请求 API
-        val url: String? = when (type) {
-            "private" -> if (userId != null) getUserProfilePhotos(userId) else null
-            "group", "supergroup" -> getChatAvatarUrl(chatId)
-            else -> null
+        // 4. 无缓存，发起网络请求（去重）
+        mutex.withLock {
+            if (pendingRequests.contains(chatId)) {
+                // 已有相同请求进行中，直接返回（等待该请求完成后会刷新）
+                return
+            }
+            pendingRequests.add(chatId)
         }
 
-        if (url != null) {
-            repo.updateAvatarUrl(chatId, url)
-            loadUrl(context, imageView, url, onHasAvatar, onNoAvatar)
-        } else {
-            // 确认无头像，标记为 "none"
-            repo.updateAvatarUrl(chatId, "none")
-            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+        try {
+            val avatarUrl = fetchChatAvatarUrl(chatId)
+            if (avatarUrl != null) {
+                // 缓存头像 URL
+                withContext(Dispatchers.IO) {
+                    repo.updateAvatarUrl(chatId, avatarUrl)
+                }
+                loadUrl(context, imageView, avatarUrl, onHasAvatar, onNetworkError)
+            } else {
+                // 无头像，标记为 "none"
+                withContext(Dispatchers.IO) {
+                    repo.updateAvatarUrl(chatId, "none")
+                }
+                withContext(Dispatchers.Main) { onNoAvatar?.invoke() }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) { onNetworkError?.invoke() }
+        } finally {
+            mutex.withLock { pendingRequests.remove(chatId) }
         }
     }
 
@@ -148,11 +146,10 @@ object AvatarHelper {
             .target(imageView)
             .listener(
                 onSuccess = { _, _ ->
-                    Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
+                    onSuccess?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
                 },
                 onError = { _, _ ->
-                    // 网络错误不改变缓存，也不改变 UI（保持当前状态）
-                    Handler(Looper.getMainLooper()).post { onError?.invoke() }
+                    onError?.let { android.os.Handler(android.os.Looper.getMainLooper()).post(it) }
                 }
             )
             .build()

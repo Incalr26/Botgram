@@ -27,7 +27,7 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         val lastTime: TextView = view.findViewById(R.id.lastTime)
         val unreadBadge: TextView = view.findViewById(R.id.unreadBadge)
         var boundChatId: Long = 0L
-        var loadJob: Job? = null       // 用于取消旧的协程
+        var loadJob: Job? = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -56,18 +56,18 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
         val currentChatId = chat.chatId
         holder.boundChatId = currentChatId
 
-        // 取消该 ViewHolder 的上一次加载任务
+        // 初始显示首字符
+        val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+        holder.avatarFallback.text = fallback
+        holder.avatarFallback.visibility = View.VISIBLE
+        holder.avatarImage.visibility = View.GONE
+
+        // 取消旧任务
         holder.loadJob?.cancel()
         holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
-            // 初始显示首字符
-            val fallback = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
-            holder.avatarFallback.text = fallback
-            holder.avatarFallback.visibility = View.VISIBLE
-            holder.avatarImage.visibility = View.GONE
-
-            val userId: Long? = if (chat.type == "private") chat.chatId else null
             AvatarHelper.loadInto(
-                holder.avatarImage, userId, chat.chatId, chat.type,
+                holder.avatarImage,
+                chatId = chat.chatId,
                 onHasAvatar = {
                     if (holder.boundChatId == currentChatId) {
                         holder.avatarFallback.visibility = View.GONE
@@ -79,6 +79,9 @@ class ChatAdapter(private val onClick: (ChatEntity) -> Unit) :
                         holder.avatarFallback.visibility = View.VISIBLE
                         holder.avatarImage.visibility = View.GONE
                     }
+                },
+                onNetworkError = {
+                    // 网络错误不改变 UI
                 }
             )
         }

@@ -167,44 +167,22 @@ class MainActivity : AppCompatActivity() {
                     val fallback = firstName.take(1).uppercase()
                     fallbackView.text = fallback
 
-                    val repo = com.incalr26.botgram.data.repository.ChatRepository(
-                        BotApp.instance.databaseHelper
-                    )
-                    val botChat = repo.getChatById(botId)
-                    val cachedUrl = botChat?.avatarUrl
-                    if (!cachedUrl.isNullOrEmpty()) {
-                        AvatarHelper.loadInto(avatarView, botId, botId, "private",
-                            onHasAvatar = {
-                                fallbackView.visibility = View.GONE
-                                avatarView.visibility = View.VISIBLE
-                            },
-                            onNoAvatar = {
-                                fallbackView.visibility = View.VISIBLE
-                                avatarView.visibility = View.GONE
-                            }
-                        )
-                    } else {
-                        fallbackView.visibility = View.VISIBLE
-                        avatarView.visibility = View.GONE
-                        launch(Dispatchers.IO) {
-                            val url = AvatarHelper.getUserProfilePhotos(botId)
-                            if (url != null) {
-                                repo.updateAvatarUrl(botId, url)
-                                withContext(Dispatchers.Main) {
-                                    AvatarHelper.loadInto(avatarView, botId, botId, "private",
-                                        onHasAvatar = {
-                                            fallbackView.visibility = View.GONE
-                                            avatarView.visibility = View.VISIBLE
-                                        },
-                                        onNoAvatar = {
-                                            fallbackView.visibility = View.VISIBLE
-                                            avatarView.visibility = View.GONE
-                                        }
-                                    )
-                                }
-                            }
+                    // 使用新接口
+                    AvatarHelper.loadInto(
+                        imageView = avatarView,
+                        chatId = botId,
+                        onHasAvatar = {
+                            fallbackView.visibility = View.GONE
+                            avatarView.visibility = View.VISIBLE
+                        },
+                        onNoAvatar = {
+                            fallbackView.visibility = View.VISIBLE
+                            avatarView.visibility = View.GONE
+                        },
+                        onNetworkError = {
+                            // 保持原样
                         }
-                    }
+                    )
                 }
             } catch (_: Exception) {}
         }
