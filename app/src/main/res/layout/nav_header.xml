@@ -5,7 +5,7 @@
     android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingBottom="32dp"
-    android:background="?attr/colorSurface"
+    android:background="?attr/colorPrimaryContainer"
     android:fitsSystemWindows="true">
 
     <FrameLayout
@@ -38,14 +38,14 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:textAppearance="?attr/textAppearanceBodyLarge"
-        android:textColor="?attr/colorOnSurface" />
+        android:textColor="?attr/colorOnPrimaryContainer" />
 
     <TextView
         android:id="@+id/botUsername"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textAppearance="?attr/textAppearanceBodySmall"
-        android:textColor="?attr/colorOnSurfaceVariant" />
+        android:textColor="?attr/colorOnPrimaryContainer" />
 
     <TextView
         android:id="@+id/botDescription"
@@ -53,7 +53,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:textAppearance="?attr/textAppearanceBodySmall"
-        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textColor="?attr/colorOnPrimaryContainer"
         android:maxLines="2"
         android:ellipsize="end" />
 </LinearLayout>

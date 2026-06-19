@@ -11,8 +11,7 @@
         android:id="@+id/contentLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:fitsSystemWindows="true">
+        android:orientation="vertical">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -50,5 +49,7 @@
         android:background="@drawable/nav_background"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/navigation_menu"
-        app:itemBackground="?attr/selectableItemBackground" />
+        app:itemBackground="?attr/selectableItemBackground"
+        app:itemTextColor="?attr/colorOnSurface"
+        app:itemIconTint="?attr/colorOnSurfaceVariant" />
 </androidx.drawerlayout.widget.DrawerLayout>

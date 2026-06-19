@@ -90,7 +90,7 @@ object AvatarHelper {
         }
     }
 
-    /** 加载头像，仅回调有/无头像，网络错误时不改变 UI */
+    /** 加载头像，回调 onHasAvatar / onNoAvatar。无头像时缓存 "none" 避免重复请求 */
     suspend fun loadInto(
         imageView: android.widget.ImageView,
         userId: Long?,
@@ -105,12 +105,20 @@ object AvatarHelper {
         val chat = repo.getChatById(chatId)
         val cachedUrl = chat?.avatarUrl
 
+        // 已标记为无头像
+        if (cachedUrl == "none") {
+            Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
+            return
+        }
+
+        // 有有效缓存，直接加载
         if (cachedUrl != null && cachedUrl.isNotEmpty()) {
             loadUrl(context, imageView, cachedUrl, onHasAvatar, onNoAvatar)
             return
         }
 
-        val url = when (type) {
+        // 无缓存，请求 API
+        val url: String? = when (type) {
             "private" -> if (userId != null) getUserProfilePhotos(userId) else null
             "group", "supergroup" -> getChatAvatarUrl(chatId)
             else -> null
@@ -120,7 +128,8 @@ object AvatarHelper {
             repo.updateAvatarUrl(chatId, url)
             loadUrl(context, imageView, url, onHasAvatar, onNoAvatar)
         } else {
-            // 无头像
+            // 确认无头像，标记为 "none"
+            repo.updateAvatarUrl(chatId, "none")
             Handler(Looper.getMainLooper()).post { onNoAvatar?.invoke() }
         }
     }
@@ -142,7 +151,7 @@ object AvatarHelper {
                     Handler(Looper.getMainLooper()).post { onSuccess?.invoke() }
                 },
                 onError = { _, _ ->
-                    // 网络错误时回调 onError，但不再改变 UI（即保持当前首字符）
+                    // 网络错误不改变缓存，也不改变 UI（保持当前状态）
                     Handler(Looper.getMainLooper()).post { onError?.invoke() }
                 }
             )

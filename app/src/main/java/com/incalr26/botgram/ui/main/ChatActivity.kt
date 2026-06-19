@@ -11,6 +11,10 @@ import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -46,6 +50,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_chat)
@@ -61,6 +66,12 @@ class ChatActivity : AppCompatActivity() {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
             supportActionBar?.subtitle = null
+
+            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
+                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                v.updatePadding(top = statusBarHeight)
+                insets
+            }
 
             val app = BotApp.instance ?: throw IllegalStateException("应用未初始化")
 
