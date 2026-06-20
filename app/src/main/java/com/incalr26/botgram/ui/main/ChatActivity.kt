@@ -58,6 +58,10 @@ class ChatActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_chat)
 
+            // 恢复状态栏占位高度，避免留白
+            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
+
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -136,6 +140,11 @@ class ChatActivity : AppCompatActivity() {
         banner.visibility = View.VISIBLE
     }
 
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    }
+
     private suspend fun loadTitleAndType() {
         val chat = chatRepository.getChatById(chatId)
         var memberCount: Int? = null
@@ -179,7 +188,7 @@ class ChatActivity : AppCompatActivity() {
         val messages = messageRepository.getMessages(chatId)
         withContext(Dispatchers.Main) {
             adapter.submitList(messages)
-            recyclerView.scrollToPosition(adapter.itemCount - 1)
+            recyclerView.scrollToPosition(adapter.itemCount - 1) // 确保滚动到底部
         }
     }
 
@@ -350,15 +359,12 @@ class ChatActivity : AppCompatActivity() {
             val msg = JSONObject(response.body?.string() ?: "")
             if (msg.getBoolean("ok")) {
                 val result = msg.getJSONObject("result")
-                // 查找被回复消息以构造引用数据
                 var replyToJson: String? = null
                 if (replyTo != null) {
                     try {
                         val repliedMessages = messageRepository.getMessages(chatId)
                         val repliedMsg = repliedMessages.find { it.messageId == replyTo }
-                        if (repliedMsg != null) {
-                            replyToJson = repliedMsg.rawJson
-                        }
+                        replyToJson = repliedMsg?.rawJson
                     } catch (_: Exception) {}
                 }
 

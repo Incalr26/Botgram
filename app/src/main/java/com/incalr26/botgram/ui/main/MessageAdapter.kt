@@ -66,17 +66,25 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
-        // 构建发送者名称（附加身份和标签）
+        // 构建发送者名称（身份 + 标签）
         val nameParts = mutableListOf<String>()
         message.senderName?.let { nameParts.add(it) }
-        if (!message.senderRole.isNullOrEmpty() && message.senderRole != "member") {
-            nameParts.add("[${when (message.senderRole) {
-                "creator" -> "群主"
-                "administrator" -> "管理员"
-                else -> message.senderRole
-            }}]")
+        if (!message.senderRole.isNullOrEmpty()) {
+            when (message.senderRole) {
+                "creator" -> nameParts.add("[群主]")
+                "administrator" -> nameParts.add("[管理员]")
+                // "member" 不显示
+            }
         }
-        if (!message.senderTitle.isNullOrEmpty()) {
+        if (!message.senderTitle.isNullOrEmpty() && (message.senderRole == "creator" || message.senderRole == "administrator")) {
+            // 标签紧跟在身份后面，格式 [管理员 标签]
+            val last = nameParts.lastOrNull()
+            if (last != null && (last == "[群主]" || last == "[管理员]")) {
+                nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " ${message.senderTitle}]"
+            } else {
+                nameParts.add("[${message.senderTitle}]")
+            }
+        } else if (!message.senderTitle.isNullOrEmpty() && message.senderRole != "member") {
             nameParts.add("[${message.senderTitle}]")
         }
         holder.senderName.text = nameParts.joinToString(" ")
