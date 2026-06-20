@@ -12,7 +12,6 @@ import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -53,12 +52,8 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         try {
             setContentView(R.layout.activity_chat)
-
-            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
@@ -164,20 +159,24 @@ class ChatActivity : AppCompatActivity() {
 
         container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupHeight = container.measuredHeight
-        val popupWidth = container.measuredWidth
 
-        val bubble = anchor.findViewById<View>(R.id.messageText)
+        val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
         val bubbleLocation = IntArray(2)
-        bubble?.getLocationOnScreen(bubbleLocation) ?: anchor.getLocationOnScreen(bubbleLocation)
+        bubble.getLocationOnScreen(bubbleLocation)
+        val bubbleTop = bubbleLocation[1]
         val bubbleLeft = bubbleLocation[0]
+        val bubbleBottom = bubbleTop + bubble.height
 
         val anchorLocation = IntArray(2)
         anchor.getLocationOnScreen(anchorLocation)
         val xOff = bubbleLeft - anchorLocation[0]
 
         val screenHeight = resources.displayMetrics.heightPixels
-        val bubbleBottom = bubbleLocation[1] + (bubble?.height ?: anchor.height)
-        val yOff = if (bubbleBottom + popupHeight > screenHeight) -popupHeight - (bubble?.height ?: anchor.height) else 0
+        val yOff = if (bubbleBottom + popupHeight > screenHeight) {
+            -popupHeight - bubble.height
+        } else {
+            0
+        }
 
         popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
     }
@@ -342,10 +341,5 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
-    }
-
-    private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 }
