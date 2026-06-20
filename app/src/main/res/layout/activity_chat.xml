@@ -5,12 +5,6 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <View
-        android:id="@+id/statusBarPlaceholder"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:background="?attr/colorSurfaceVariant" />
-
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
@@ -55,11 +49,9 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginStart="8dp"
-            android:src="@android:drawable/ic_menu_send"
+            android:src="@drawable/ic_send"
             android:contentDescription="发送"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:tint="?attr/colorPrimary"
-            android:tintMode="src_in"
             android:scaleType="center" />
     </LinearLayout>
 </LinearLayout>

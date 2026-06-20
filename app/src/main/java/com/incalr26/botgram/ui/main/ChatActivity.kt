@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
@@ -15,9 +16,13 @@ import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -54,10 +59,17 @@ class ChatActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_chat)
 
-            // 设置状态栏占位高度
-            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-            val statusBarHeight = getStatusBarHeight()
-            statusBarPlaceholder.layoutParams.height = statusBarHeight
+            val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
+            setSupportActionBar(toolbar)
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.title = "聊天"
+            supportActionBar?.subtitle = null
+
+            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
+                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                v.updatePadding(top = statusBarHeight)
+                insets
+            }
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) {
@@ -65,18 +77,11 @@ class ChatActivity : AppCompatActivity() {
                 return
             }
 
-            val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
-            setSupportActionBar(toolbar)
-            supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            supportActionBar?.title = "聊天"
-            supportActionBar?.subtitle = null
-
             val app = BotApp.instance ?: throw IllegalStateException("应用未初始化")
 
             chatRepository = ChatRepository(app.databaseHelper)
             messageRepository = MessageRepository(app.databaseHelper)
 
-            // 长按回调
             adapter = MessageAdapter(
                 onLongClick = { message, view ->
                     showMessageMenu(message, view)
@@ -119,38 +124,51 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // 长按菜单
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menu.add("复制")
-        popup.menu.add("复读 (+1)")
-        if (message.isOutgoing) {
-            popup.menu.add("撤回")
-        }
-        // 复制链接、编辑、回复、转发等以后补充
-        popup.setOnMenuItemClickListener { item ->
-            when (item.title) {
-                "复制" -> {
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
-                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
-                }
-                "复读 (+1)" -> {
-                    messageInputSetText(message.text ?: "")
-                }
-                "撤回" -> {
-                    lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-                        deleteMessage(message.messageId)
-                    }
+        val popup = PopupMenu(this, anchor).apply {
+            menu.add(0, 1, 0, "复制").setIcon(R.drawable.ic_copy)
+            menu.add(0, 2, 0, "复读").setIcon(R.drawable.ic_repeat)
+            if (message.isOutgoing) {
+                menu.add(0, 3, 0, "撤回").setIcon(android.R.drawable.ic_menu_delete)
+            }
+            for (i in 0 until menu.size()) {
+                val menuItem = menu.getItem(i)
+                menuItem.icon?.let { icon ->
+                    val typedValue = TypedValue()
+                    this@ChatActivity.theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
+                    icon.setTint(typedValue.data)
+                    icon.setBounds(0, 0, 48, 48)
                 }
             }
-            true
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
+                        Toast.makeText(this@ChatActivity, "已复制", Toast.LENGTH_SHORT).show()
+                    }
+                    2 -> handleRepeat(message.text ?: "")
+                    3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
+                }
+                true
+            }
         }
         popup.show()
     }
 
-    private fun messageInputSetText(text: String) {
-        findViewById<EditText>(R.id.messageInput).setText(text)
+    private fun handleRepeat(text: String) {
+        val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+        val needConfirm = prefs.getBoolean("repeat_confirm", true)
+        if (needConfirm) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("复读确认")
+                .setMessage("确定要复读这条消息吗？")
+                .setPositiveButton("确定") { _, _ -> sendTextMessage(text) }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            sendTextMessage(text)
+        }
     }
 
     private suspend fun deleteMessage(messageId: Long) {
@@ -176,10 +194,6 @@ class ChatActivity : AppCompatActivity() {
             }
         }
     }
-
-    // 其余方法保持之前的实现（loadTitleAndType, loadMessagesInternal, sendTextMessage 等）
-    // 由于篇幅，此处省略，实际使用时请保留之前完整的这些方法
-    // 参见上几轮的完整 ChatActivity
 
     private suspend fun loadTitleAndType() {
         val chat = chatRepository.getChatById(chatId)
@@ -290,10 +304,5 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
-    }
-
-    private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 }

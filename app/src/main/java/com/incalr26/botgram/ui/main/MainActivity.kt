@@ -5,9 +5,8 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
-import android.text.style.AbsoluteSizeSpan
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
-import android.text.util.Linkify
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -74,14 +73,6 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        // 版本号灰色小字
-        val versionItem = navigationView.menu.findItem(R.id.nav_version)
-        val sp = SpannableString("版本 ${BuildConfig.VERSION_NAME}").apply {
-            setSpan(ForegroundColorSpan(Color.GRAY), 0, length, 0)
-            setSpan(AbsoluteSizeSpan(12, true), 0, length, 0)
-        }
-        versionItem?.title = sp
-
         toolbar.setNavigationOnClickListener {
             if (drawerLayout.isDrawerOpen(Gravity.LEFT)) drawerLayout.closeDrawer(Gravity.LEFT)
             else drawerLayout.openDrawer(Gravity.LEFT)
@@ -141,13 +132,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAboutDialog() {
-        val message = "版本: ${BuildConfig.VERSION_NAME}\n\n" +
-                "Telegram 频道: https://t.me/Botgram_Channel\n" +
-                "Telegram 群组: https://t.me/Botgram_ChatGroup\n" +
-                "GitHub: https://github.com/Incalr26/Botgram"
+        val versionText = "版本: ${BuildConfig.VERSION_NAME}"
+        val channelText = "频道: @Botgram_Channel"
+        val groupText = "群组: @Botgram_ChatGroup"
+        val githubText = "GitHub"
+
+        val spannable = SpannableString("$versionText\n$channelText\n$groupText\n$githubText").apply {
+            // 频道
+            val channelStart = length - channelText.length - groupText.length - githubText.length - 3
+            setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) {
+                    openUrl("https://t.me/Botgram_Channel")
+                }
+            }, channelStart, channelStart + channelText.length, 0)
+            // 群组
+            val groupStart = length - groupText.length - githubText.length - 2
+            setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) {
+                    openUrl("https://t.me/Botgram_ChatGroup")
+                }
+            }, groupStart, groupStart + groupText.length, 0)
+            // GitHub
+            val githubStart = length - githubText.length - 1
+            setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) {
+                    openUrl("https://github.com/Incalr26/Botgram")
+                }
+            }, githubStart, length - 1, 0)
+
+            // 蓝色文字
+            setSpan(ForegroundColorSpan(Color.BLUE), channelStart, channelStart + channelText.length, 0)
+            setSpan(ForegroundColorSpan(Color.BLUE), groupStart, groupStart + groupText.length, 0)
+            setSpan(ForegroundColorSpan(Color.BLUE), githubStart, length - 1, 0)
+        }
+
         val textView = TextView(this).apply {
-            text = message
-            autoLinkMask = Linkify.WEB_URLS
+            text = spannable
             movementMethod = LinkMovementMethod.getInstance()
             setTextColor(Color.BLACK)
             setPadding(48, 32, 48, 32)
@@ -157,6 +177,11 @@ class MainActivity : AppCompatActivity() {
             .setView(textView)
             .setPositiveButton("确定", null)
             .show()
+    }
+
+    private fun openUrl(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+        startActivity(intent)
     }
 
     private fun recoverLegacyChats() {
