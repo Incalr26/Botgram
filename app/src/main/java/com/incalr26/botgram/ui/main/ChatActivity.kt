@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -52,6 +53,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         try {
             setContentView(R.layout.activity_chat)
 
@@ -117,12 +119,11 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // 长按菜单：PopupWindow，宽度包裹内容，图标在左，主题色
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
-            elevation = 8f
+            elevation = 12f * resources.displayMetrics.density
             clipToOutline = true
         }
 
@@ -161,7 +162,24 @@ class ChatActivity : AppCompatActivity() {
             container.addView(itemView)
         }
 
-        popupWindow.showAsDropDown(anchor, 0, 0, Gravity.START)
+        container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popupHeight = container.measuredHeight
+        val popupWidth = container.measuredWidth
+
+        val bubble = anchor.findViewById<View>(R.id.messageText)
+        val bubbleLocation = IntArray(2)
+        bubble?.getLocationOnScreen(bubbleLocation) ?: anchor.getLocationOnScreen(bubbleLocation)
+        val bubbleLeft = bubbleLocation[0]
+
+        val anchorLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        val xOff = bubbleLeft - anchorLocation[0]
+
+        val screenHeight = resources.displayMetrics.heightPixels
+        val bubbleBottom = bubbleLocation[1] + (bubble?.height ?: anchor.height)
+        val yOff = if (bubbleBottom + popupHeight > screenHeight) -popupHeight - (bubble?.height ?: anchor.height) else 0
+
+        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
     }
 
     private fun handleMenuAction(action: Int, message: MessageEntity) {
