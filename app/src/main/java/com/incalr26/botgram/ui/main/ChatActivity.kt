@@ -8,16 +8,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.ListPopupWindow
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -57,8 +52,6 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 确保键盘调整模式
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         try {
             setContentView(R.layout.activity_chat)
 
@@ -124,50 +117,63 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // 长按菜单：小尺寸，主题色图标，包裹内容宽度
+    // 长按菜单：PopupWindow，宽度包裹内容，图标在左，主题色
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
-        val items = listOf(
-            Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_plus_one_circle, 2)
-        ) + if (message.isOutgoing) listOf(Triple("撤回", R.drawable.ic_revoke, 3)) else emptyList()
-
-        val popup = ListPopupWindow(this).apply {
-            setAnchorView(anchor)
-            setWidth(ListPopupWindow.WRAP_CONTENT)
-            setHeight(ListPopupWindow.WRAP_CONTENT)
-            setAdapter(object : android.widget.BaseAdapter() {
-                override fun getCount(): Int = items.size
-                override fun getItem(position: Int): Any = items[position]
-                override fun getItemId(position: Int): Long = position.toLong()
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    val view: View = convertView ?: layoutInflater.inflate(R.layout.item_popup_menu, parent, false)
-                    val icon = view.findViewById<ImageView>(R.id.menu_icon)
-                    val text = view.findViewById<TextView>(R.id.menu_text)
-                    val (title, iconRes, _) = items[position]
-                    icon.setImageResource(iconRes)
-                    // 图标使用主题色，确保非灰色
-                    val typedValue = TypedValue()
-                    this@ChatActivity.theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
-                    icon.setColorFilter(typedValue.data)
-                    text.text = title
-                    return view
-                }
-            })
-            setOnItemClickListener { _, _, position, _ ->
-                val action = items[position].third
-                when (action) {
-                    1 -> {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
-                        Toast.makeText(this@ChatActivity, "已复制", Toast.LENGTH_SHORT).show()
-                    }
-                    2 -> handleRepeat(message.text ?: "")
-                    3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
-                }
-                dismiss()
-            }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
+            elevation = 8f
+            clipToOutline = true
         }
-        popup.show()
+
+        val typedValue = TypedValue()
+        theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
+        val textColor = typedValue.data
+        theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+        val primaryColor = typedValue.data
+
+        val items = mutableListOf(
+            Triple("复制", R.drawable.ic_copy, 1),
+            Triple("复读", R.drawable.ic_plus_one_outline, 2)
+        )
+        if (message.isOutgoing) {
+            items.add(Triple("撤回", R.drawable.ic_revoke, 3))
+        }
+
+        val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+            isOutsideTouchable = true
+            isFocusable = true
+            setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent))
+        }
+
+        items.forEach { (title, iconRes, action) ->
+            val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
+            val icon = itemView.findViewById<ImageView>(R.id.menu_icon)
+            val text = itemView.findViewById<TextView>(R.id.menu_text)
+            icon.setImageResource(iconRes)
+            icon.setColorFilter(primaryColor)
+            text.text = title
+            text.setTextColor(textColor)
+            itemView.setOnClickListener {
+                handleMenuAction(action, message)
+                popupWindow.dismiss()
+            }
+            container.addView(itemView)
+        }
+
+        popupWindow.showAsDropDown(anchor, 0, 0, Gravity.START)
+    }
+
+    private fun handleMenuAction(action: Int, message: MessageEntity) {
+        when (action) {
+            1 -> {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
+                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            }
+            2 -> handleRepeat(message.text ?: "")
+            3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
+        }
     }
 
     private fun handleRepeat(text: String) {
