@@ -20,7 +20,10 @@ import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
+class MessageAdapter(
+    private val onClick: ((MessageEntity) -> Unit)? = null,
+    private val onLongClick: ((MessageEntity, View) -> Boolean)? = null
+) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: ImageView = view.findViewById(R.id.avatar)
@@ -43,6 +46,13 @@ class MessageAdapter : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(Dif
         val isOutgoing = message.isOutgoing
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
+
+        // 设置点击
+        holder.itemView.setOnClickListener { onClick?.invoke(message) }
+        // 设置长按
+        holder.itemView.setOnLongClickListener { view ->
+            onLongClick?.invoke(message, view) ?: false
+        }
 
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE

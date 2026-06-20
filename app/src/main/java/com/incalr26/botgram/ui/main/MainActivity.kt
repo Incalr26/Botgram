@@ -4,8 +4,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.text.SpannableString
+import android.text.method.LinkMovementMethod
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
+import android.text.util.Linkify
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -143,9 +145,16 @@ class MainActivity : AppCompatActivity() {
                 "Telegram 频道: https://t.me/Botgram_Channel\n" +
                 "Telegram 群组: https://t.me/Botgram_ChatGroup\n" +
                 "GitHub: https://github.com/Incalr26/Botgram"
+        val textView = TextView(this).apply {
+            text = message
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+            setTextColor(Color.BLACK)
+            setPadding(48, 32, 48, 32)
+        }
         AlertDialog.Builder(this)
             .setTitle("关于 Botgram")
-            .setMessage(message)
+            .setView(textView)
             .setPositiveButton("确定", null)
             .show()
     }

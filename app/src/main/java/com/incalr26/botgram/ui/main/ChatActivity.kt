@@ -1,6 +1,8 @@
 package com.incalr26.botgram.ui.main
 
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -9,6 +11,7 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -72,7 +75,14 @@ class ChatActivity : AppCompatActivity() {
 
             chatRepository = ChatRepository(app.databaseHelper)
             messageRepository = MessageRepository(app.databaseHelper)
-            adapter = MessageAdapter()
+
+            // 长按回调
+            adapter = MessageAdapter(
+                onLongClick = { message, view ->
+                    showMessageMenu(message, view)
+                    true
+                }
+            )
 
             recyclerView = findViewById(R.id.messagesRecyclerView)
             recyclerView.adapter = adapter
@@ -109,17 +119,73 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    // 长按菜单
+    private fun showMessageMenu(message: MessageEntity, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add("复制")
+        popup.menu.add("复读 (+1)")
+        if (message.isOutgoing) {
+            popup.menu.add("撤回")
+        }
+        // 复制链接、编辑、回复、转发等以后补充
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "复制" -> {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
+                    Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+                }
+                "复读 (+1)" -> {
+                    messageInputSetText(message.text ?: "")
+                }
+                "撤回" -> {
+                    lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+                        deleteMessage(message.messageId)
+                    }
+                }
+            }
+            true
+        }
+        popup.show()
     }
+
+    private fun messageInputSetText(text: String) {
+        findViewById<EditText>(R.id.messageInput).setText(text)
+    }
+
+    private suspend fun deleteMessage(messageId: Long) {
+        try {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return
+            val url = "https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId"
+            val request = Request.Builder().url(url).build()
+            val response = ApiClient.getClient().newCall(request).execute()
+            if (response.isSuccessful) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "消息已撤回", Toast.LENGTH_SHORT).show()
+                    loadMessages()
+                }
+            } else {
+                val body = response.body?.string() ?: ""
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "撤回失败: $body", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@ChatActivity, "撤回失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // 其余方法保持之前的实现（loadTitleAndType, loadMessagesInternal, sendTextMessage 等）
+    // 由于篇幅，此处省略，实际使用时请保留之前完整的这些方法
+    // 参见上几轮的完整 ChatActivity
 
     private suspend fun loadTitleAndType() {
         val chat = chatRepository.getChatById(chatId)
         var memberCount: Int? = null
         try {
-            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-                .getString("bot_token", "") ?: ""
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
             val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
             val request = Request.Builder().url(url).build()
             val response = ApiClient.getClient().newCall(request).execute()
@@ -169,9 +235,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            unregisterReceiver(messageReceiver)
-        } catch (_: Exception) {}
+        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
     }
 
     private fun gotoCrash(throwable: Throwable) {
@@ -185,19 +249,14 @@ class ChatActivity : AppCompatActivity() {
 
     private fun sendTextMessage(text: String) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-                .getString("bot_token", "") ?: error("未登录")
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val url = "https://api.telegram.org/bot$token/sendMessage"
             val jsonBody = JSONObject().apply {
                 put("chat_id", chatId)
                 put("text", text)
             }
-            val requestBody = jsonBody.toString()
-                .toRequestBody("application/json".toMediaTypeOrNull())
-            val request = Request.Builder()
-                .url(url)
-                .post(requestBody)
-                .build()
+            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
+            val request = Request.Builder().url(url).post(requestBody).build()
             val response = ApiClient.getClient().newCall(request).execute()
             if (!response.isSuccessful) {
                 withContext(Dispatchers.Main) {
@@ -231,5 +290,10 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 }
