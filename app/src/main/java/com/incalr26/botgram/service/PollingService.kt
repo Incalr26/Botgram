@@ -95,6 +95,33 @@ class PollingService : Service() {
         val entitiesJson = if (msg.has("entities")) msg.getJSONArray("entities").toString() else null
         val replyToJson = if (msg.has("reply_to_message")) msg.getJSONObject("reply_to_message").toString() else null
 
+        val from = msg.optJSONObject("from")
+        val senderId = from?.optLong("id")
+        val senderName = from?.optString("first_name") ?: "未知"
+
+        // 群组中获取成员身份，失败或非群组则默认 member
+        var senderRole: String? = null
+        var senderTitle: String? = null
+        if (chatType != "private" && senderId != null) {
+            try {
+                val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+                    .getString("bot_token", "") ?: ""
+                val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
+                val memberReq = Request.Builder().url(memberUrl).build()
+                val memberRes = ApiClient.getClient().newCall(memberReq).execute()
+                if (memberRes.isSuccessful) {
+                    val memberJson = JSONObject(memberRes.body?.string() ?: "")
+                    if (memberJson.getBoolean("ok")) {
+                        val result = memberJson.getJSONObject("result")
+                        senderRole = result.optString("status", "member")
+                        senderTitle = result.optString("custom_title", null)
+                    }
+                }
+            } catch (_: Exception) {}
+            // 如果仍未获取到角色，至少设为 member
+            if (senderRole.isNullOrEmpty()) senderRole = "member"
+        }
+
         val existingChat = chatRepository.getChatById(chatId)
         val existingAvatarUrl = existingChat?.avatarUrl
 
@@ -113,9 +140,6 @@ class PollingService : Service() {
 
         chatRepository.insertOrUpdateChat(chatEntity)
 
-        val from = msg.optJSONObject("from")
-        val senderId = from?.optLong("id")
-        val senderName = from?.optString("first_name") ?: "未知"
         val messageId = msg.getLong("message_id")
 
         messageRepository.insertMessage(
@@ -129,7 +153,9 @@ class PollingService : Service() {
                 isOutgoing = false,
                 rawJson = msg.toString(),
                 entities = entitiesJson,
-                replyToJson = replyToJson
+                replyToJson = replyToJson,
+                senderRole = senderRole,
+                senderTitle = senderTitle
             )
         )
 
@@ -155,11 +181,8 @@ class PollingService : Service() {
         }
         if (msg.has("group_chat_created")) return "群组已创建"
         if (msg.has("new_chat_title")) return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
-
-        // 文本消息
         if (msg.has("text")) return msg.getString("text")
 
-        // 媒体消息提取 caption
         val caption = msg.optString("caption", null)
         val captionSuffix = if (!caption.isNullOrEmpty()) " $caption" else ""
 

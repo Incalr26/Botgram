@@ -26,7 +26,11 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
                 text = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_TEXT)),
                 date = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_DATE)),
                 isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_OUTGOING)) == 1,
-                rawJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_RAW_JSON))
+                rawJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_RAW_JSON)),
+                entities = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_ENTITIES)),
+                replyToJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REPLY_TO_JSON)),
+                senderRole = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_ROLE)),
+                senderTitle = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_TITLE))
             ))
         }
         cursor.close()
@@ -45,10 +49,11 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
             put(DatabaseHelper.COL_DATE, message.date)
             put(DatabaseHelper.COL_IS_OUTGOING, if (message.isOutgoing) 1 else 0)
             put(DatabaseHelper.COL_RAW_JSON, message.rawJson)
+            put(DatabaseHelper.COL_ENTITIES, message.entities)
+            put(DatabaseHelper.COL_REPLY_TO_JSON, message.replyToJson)
+            put(DatabaseHelper.COL_SENDER_ROLE, message.senderRole)
+            put(DatabaseHelper.COL_SENDER_TITLE, message.senderTitle)
         }
-        db.insertWithOnConflict(
-            DatabaseHelper.TABLE_MESSAGES, null, values,
-            android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE
-        )
+        db.insertWithOnConflict(DatabaseHelper.TABLE_MESSAGES, null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
     }
 }

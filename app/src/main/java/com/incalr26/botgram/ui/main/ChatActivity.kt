@@ -58,9 +58,6 @@ class ChatActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_chat)
 
-            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
-
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -93,12 +90,21 @@ class ChatActivity : AppCompatActivity() {
 
             val messageInput = findViewById<EditText>(R.id.messageInput)
             val sendButton = findViewById<ImageButton>(R.id.sendButton)
+            val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
+            val replyText = findViewById<TextView>(R.id.replyText)
+            val cancelReplyBtn = findViewById<ImageButton>(R.id.cancelReply)
+
+            cancelReplyBtn.setOnClickListener {
+                replyToMessageId = null
+                replyBanner.visibility = View.GONE
+            }
 
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
                 if (text.isNotEmpty()) {
                     sendTextMessage(text, replyToMessageId)
                     replyToMessageId = null
+                    replyBanner.visibility = View.GONE
                     messageInput.text.clear()
                 }
             }
@@ -121,9 +127,13 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    private fun setReplyBanner(message: MessageEntity) {
+        val banner = findViewById<LinearLayout>(R.id.replyBanner)
+        val textView = findViewById<TextView>(R.id.replyText)
+        val name = message.senderName ?: "未知"
+        val preview = message.text?.take(50) ?: ""
+        textView.text = "回复 $name: $preview"
+        banner.visibility = View.VISIBLE
     }
 
     private suspend fun loadTitleAndType() {
@@ -261,11 +271,11 @@ class ChatActivity : AppCompatActivity() {
             3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
             4 -> {
                 replyToMessageId = message.messageId
+                setReplyBanner(message)
                 val input = findViewById<EditText>(R.id.messageInput)
                 input.requestFocus()
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.showSoftInput(input, 0)
-                Toast.makeText(this, "回复模式已开启", Toast.LENGTH_SHORT).show()
             }
             5 -> {
                 val link = if (chatId < 0) {
@@ -340,6 +350,18 @@ class ChatActivity : AppCompatActivity() {
             val msg = JSONObject(response.body?.string() ?: "")
             if (msg.getBoolean("ok")) {
                 val result = msg.getJSONObject("result")
+                // 查找被回复消息以构造引用数据
+                var replyToJson: String? = null
+                if (replyTo != null) {
+                    try {
+                        val repliedMessages = messageRepository.getMessages(chatId)
+                        val repliedMsg = repliedMessages.find { it.messageId == replyTo }
+                        if (repliedMsg != null) {
+                            replyToJson = repliedMsg.rawJson
+                        }
+                    } catch (_: Exception) {}
+                }
+
                 val messageEntity = MessageEntity(
                     messageId = result.getLong("message_id"),
                     chatId = chatId,
@@ -348,7 +370,8 @@ class ChatActivity : AppCompatActivity() {
                     text = text,
                     date = result.getLong("date"),
                     isOutgoing = true,
-                    rawJson = result.toString()
+                    rawJson = result.toString(),
+                    replyToJson = replyToJson
                 )
                 messageRepository.insertMessage(messageEntity)
                 chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)

@@ -66,6 +66,21 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
+        // 构建发送者名称（附加身份和标签）
+        val nameParts = mutableListOf<String>()
+        message.senderName?.let { nameParts.add(it) }
+        if (!message.senderRole.isNullOrEmpty() && message.senderRole != "member") {
+            nameParts.add("[${when (message.senderRole) {
+                "creator" -> "群主"
+                "administrator" -> "管理员"
+                else -> message.senderRole
+            }}]")
+        }
+        if (!message.senderTitle.isNullOrEmpty()) {
+            nameParts.add("[${message.senderTitle}]")
+        }
+        holder.senderName.text = nameParts.joinToString(" ")
+
         // 设置引用预览
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
@@ -81,7 +96,6 @@ class MessageAdapter(
             holder.replyContainer.visibility = View.GONE
         }
 
-        holder.senderName.text = message.senderName ?: "未知"
         val rawText = message.text ?: ""
         holder.messageText.text = MessageFormatter.format(rawText, message.entities)
         val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -97,7 +111,6 @@ class MessageAdapter(
                 holder.loadJob?.cancel()
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
                     if (holder.boundMessageId != currentMsgId) return@launch
-
                     val avatarUrl = AvatarHelper.getUserAvatar(userId)
                     if (!avatarUrl.isNullOrEmpty()) {
                         val request = ImageRequest.Builder(holder.itemView.context)

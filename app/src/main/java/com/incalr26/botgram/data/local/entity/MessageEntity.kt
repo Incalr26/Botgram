@@ -10,5 +10,7 @@ data class MessageEntity(
     val isOutgoing: Boolean = false,
     val rawJson: String? = null,
     val entities: String? = null,
-    val replyToJson: String? = null   // 引用的原始消息 JSON
+    val replyToJson: String? = null,
+    val senderRole: String? = null,   // 身份：creator/administrator/member
+    val senderTitle: String? = null   // 自定义标签
 )

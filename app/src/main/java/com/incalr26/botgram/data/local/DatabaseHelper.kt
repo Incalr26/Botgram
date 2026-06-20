@@ -8,7 +8,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "botgram.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
 
         const val TABLE_CHATS = "chats"
         const val TABLE_MESSAGES = "messages"
@@ -33,6 +33,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_IS_OUTGOING = "isOutgoing"
         const val COL_RAW_JSON = "rawJson"
         const val COL_ENTITIES = "entities"
+        const val COL_REPLY_TO_JSON = "replyToJson"
+        const val COL_SENDER_ROLE = "senderRole"
+        const val COL_SENDER_TITLE = "senderTitle"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -63,6 +66,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_IS_OUTGOING INTEGER NOT NULL DEFAULT 0,
                 $COL_RAW_JSON TEXT,
                 $COL_ENTITIES TEXT,
+                $COL_REPLY_TO_JSON TEXT,
+                $COL_SENDER_ROLE TEXT,
+                $COL_SENDER_TITLE TEXT,
                 PRIMARY KEY ($COL_MESSAGE_ID, $COL_CHAT_ID)
             )
         """.trimIndent()
@@ -78,8 +84,12 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         }
         if (oldVersion < 3) {
             db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_ACCOUNT_HASH TEXT NOT NULL DEFAULT ''")
-            // 将现有数据标记为旧账号，以便隐藏
             db.execSQL("UPDATE $TABLE_CHATS SET $COL_ACCOUNT_HASH = 'legacy'")
+        }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_REPLY_TO_JSON TEXT")
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_ROLE TEXT")
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_TITLE TEXT")
         }
     }
 }
