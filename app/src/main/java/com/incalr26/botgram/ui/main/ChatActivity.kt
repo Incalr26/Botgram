@@ -57,7 +57,7 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 强制设置键盘模式，确保输入框可见
+        // 确保键盘调整模式
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         try {
             setContentView(R.layout.activity_chat)
@@ -124,16 +124,16 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // 长按菜单：使用 ListPopupWindow 从锚点弹出
+    // 长按菜单：小尺寸，主题色图标，包裹内容宽度
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
         val items = listOf(
             Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读 +1", R.drawable.ic_plus_one, 2)
+            Triple("复读", R.drawable.ic_plus_one_circle, 2)
         ) + if (message.isOutgoing) listOf(Triple("撤回", R.drawable.ic_revoke, 3)) else emptyList()
 
         val popup = ListPopupWindow(this).apply {
             setAnchorView(anchor)
-            setContentWidth(ListPopupWindow.WRAP_CONTENT)
+            setWidth(ListPopupWindow.WRAP_CONTENT)
             setHeight(ListPopupWindow.WRAP_CONTENT)
             setAdapter(object : android.widget.BaseAdapter() {
                 override fun getCount(): Int = items.size
@@ -145,9 +145,9 @@ class ChatActivity : AppCompatActivity() {
                     val text = view.findViewById<TextView>(R.id.menu_text)
                     val (title, iconRes, _) = items[position]
                     icon.setImageResource(iconRes)
-                    // 图标颜色
+                    // 图标使用主题色，确保非灰色
                     val typedValue = TypedValue()
-                    this@ChatActivity.theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
+                    this@ChatActivity.theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
                     icon.setColorFilter(typedValue.data)
                     text.text = title
                     return view

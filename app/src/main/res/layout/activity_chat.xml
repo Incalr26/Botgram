@@ -1,21 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- 状态栏占位，背景与 Toolbar 一致 -->
+    <!-- 状态栏占位 -->
     <View
         android:id="@+id/statusBarPlaceholder"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:background="?attr/colorSurfaceVariant" />
+        android:background="?attr/colorSurfaceVariant"
+        android:layout_alignParentTop="true" />
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
+        android:layout_below="@id/statusBarPlaceholder"
         android:background="?attr/colorSurfaceVariant"
         app:title="聊天"
         app:titleTextColor="?attr/colorOnSurfaceVariant"
@@ -24,12 +25,15 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messagesRecyclerView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="match_parent"
+        android:layout_below="@id/toolbar"
+        android:layout_above="@+id/bottomBar" />
 
     <LinearLayout
+        android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
         android:orientation="horizontal"
         android:padding="8dp"
         android:gravity="center_vertical">
@@ -61,4 +65,4 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:scaleType="center" />
     </LinearLayout>
-</LinearLayout>
+</RelativeLayout>
