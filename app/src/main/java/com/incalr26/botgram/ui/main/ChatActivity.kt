@@ -10,15 +10,16 @@ import android.os.Bundle
 import android.util.TypedValue
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.PopupMenu
+import android.widget.ImageView
+import android.widget.ListPopupWindow
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -56,20 +57,19 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 强制设置键盘模式，确保输入框可见
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         try {
             setContentView(R.layout.activity_chat)
+
+            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
             supportActionBar?.subtitle = null
-
-            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
-                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-                v.updatePadding(top = statusBarHeight)
-                insets
-            }
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) {
@@ -124,24 +124,38 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    // 长按菜单：使用 ListPopupWindow 从锚点弹出
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
-        val popup = PopupMenu(this, anchor).apply {
-            menu.add(0, 1, 0, "复制").setIcon(R.drawable.ic_copy)
-            menu.add(0, 2, 0, "复读").setIcon(R.drawable.ic_repeat)
-            if (message.isOutgoing) {
-                menu.add(0, 3, 0, "撤回").setIcon(android.R.drawable.ic_menu_delete)
-            }
-            for (i in 0 until menu.size()) {
-                val menuItem = menu.getItem(i)
-                menuItem.icon?.let { icon ->
+        val items = listOf(
+            Triple("复制", R.drawable.ic_copy, 1),
+            Triple("复读 +1", R.drawable.ic_plus_one, 2)
+        ) + if (message.isOutgoing) listOf(Triple("撤回", R.drawable.ic_revoke, 3)) else emptyList()
+
+        val popup = ListPopupWindow(this).apply {
+            setAnchorView(anchor)
+            setContentWidth(ListPopupWindow.WRAP_CONTENT)
+            setHeight(ListPopupWindow.WRAP_CONTENT)
+            setAdapter(object : android.widget.BaseAdapter() {
+                override fun getCount(): Int = items.size
+                override fun getItem(position: Int): Any = items[position]
+                override fun getItemId(position: Int): Long = position.toLong()
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                    val view: View = convertView ?: layoutInflater.inflate(R.layout.item_popup_menu, parent, false)
+                    val icon = view.findViewById<ImageView>(R.id.menu_icon)
+                    val text = view.findViewById<TextView>(R.id.menu_text)
+                    val (title, iconRes, _) = items[position]
+                    icon.setImageResource(iconRes)
+                    // 图标颜色
                     val typedValue = TypedValue()
                     this@ChatActivity.theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
-                    icon.setTint(typedValue.data)
-                    icon.setBounds(0, 0, 48, 48)
+                    icon.setColorFilter(typedValue.data)
+                    text.text = title
+                    return view
                 }
-            }
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
+            })
+            setOnItemClickListener { _, _, position, _ ->
+                val action = items[position].third
+                when (action) {
                     1 -> {
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
@@ -150,7 +164,7 @@ class ChatActivity : AppCompatActivity() {
                     2 -> handleRepeat(message.text ?: "")
                     3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
                 }
-                true
+                dismiss()
             }
         }
         popup.show()
@@ -304,5 +318,10 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 }

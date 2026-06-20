@@ -3,10 +3,8 @@ package com.incalr26.botgram.ui.settings
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.incalr26.botgram.R
 import com.incalr26.botgram.ui.login.LoginActivity
@@ -20,12 +18,9 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        // 沉浸式状态栏
-        ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
-            val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
-            v.updatePadding(top = statusBarHeight)
-            insets
-        }
+        // 状态栏占位高度（与主页一致）
+        val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+        statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
         val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
 
@@ -58,5 +53,10 @@ class SettingsActivity : AppCompatActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resId > 0) resources.getDimensionPixelSize(resId) else 0
     }
 }

@@ -57,11 +57,9 @@ class MainActivity : AppCompatActivity() {
         navigationView = findViewById(R.id.navigationView)
         contentLayout = findViewById(R.id.contentLayout)
 
-        // 状态栏占位
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
-        // 菜单头部状态栏占位
         val headerView = navigationView.getHeaderView(0)
         val headerStatusBarSpace = headerView.findViewById<View>(R.id.statusBarSpace)
         headerStatusBarSpace.post { headerStatusBarSpace.layoutParams.height = getStatusBarHeight() }
@@ -132,44 +130,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showAboutDialog() {
-        val versionText = "版本: ${BuildConfig.VERSION_NAME}"
-        val channelText = "频道: @Botgram_Channel"
-        val groupText = "群组: @Botgram_ChatGroup"
-        val githubText = "GitHub"
+        val message = "版本: ${BuildConfig.VERSION_NAME}\n" +
+                "Telegram 频道\n" +
+                "Telegram 群组\n" +
+                "GitHub"
+        val spannable = SpannableString(message).apply {
+            val channelStart = message.indexOf("Telegram 频道")
+            setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) { openUrl("https://t.me/Botgram_Channel") }
+            }, channelStart, channelStart + "Telegram 频道".length, 0)
+            setSpan(ForegroundColorSpan(Color.BLUE), channelStart, channelStart + "Telegram 频道".length, 0)
 
-        val spannable = SpannableString("$versionText\n$channelText\n$groupText\n$githubText").apply {
-            // 频道
-            val channelStart = length - channelText.length - groupText.length - githubText.length - 3
+            val groupStart = message.indexOf("Telegram 群组")
             setSpan(object : ClickableSpan() {
-                override fun onClick(widget: View) {
-                    openUrl("https://t.me/Botgram_Channel")
-                }
-            }, channelStart, channelStart + channelText.length, 0)
-            // 群组
-            val groupStart = length - groupText.length - githubText.length - 2
-            setSpan(object : ClickableSpan() {
-                override fun onClick(widget: View) {
-                    openUrl("https://t.me/Botgram_ChatGroup")
-                }
-            }, groupStart, groupStart + groupText.length, 0)
-            // GitHub
-            val githubStart = length - githubText.length - 1
-            setSpan(object : ClickableSpan() {
-                override fun onClick(widget: View) {
-                    openUrl("https://github.com/Incalr26/Botgram")
-                }
-            }, githubStart, length - 1, 0)
+                override fun onClick(widget: View) { openUrl("https://t.me/Botgram_ChatGroup") }
+            }, groupStart, groupStart + "Telegram 群组".length, 0)
+            setSpan(ForegroundColorSpan(Color.BLUE), groupStart, groupStart + "Telegram 群组".length, 0)
 
-            // 蓝色文字
-            setSpan(ForegroundColorSpan(Color.BLUE), channelStart, channelStart + channelText.length, 0)
-            setSpan(ForegroundColorSpan(Color.BLUE), groupStart, groupStart + groupText.length, 0)
-            setSpan(ForegroundColorSpan(Color.BLUE), githubStart, length - 1, 0)
+            val githubStart = message.indexOf("GitHub")
+            setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) { openUrl("https://github.com/Incalr26/Botgram") }
+            }, githubStart, githubStart + "GitHub".length, 0)
+            setSpan(ForegroundColorSpan(Color.BLUE), githubStart, githubStart + "GitHub".length, 0)
         }
 
         val textView = TextView(this).apply {
             text = spannable
             movementMethod = LinkMovementMethod.getInstance()
-            setTextColor(Color.BLACK)
             setPadding(48, 32, 48, 32)
         }
         AlertDialog.Builder(this)
@@ -180,8 +167,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openUrl(url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
-        startActivity(intent)
+        startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
     }
 
     private fun recoverLegacyChats() {
