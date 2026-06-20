@@ -9,5 +9,6 @@ data class MessageEntity(
     val date: Long,
     val isOutgoing: Boolean = false,
     val rawJson: String? = null,
-    val entities: String? = null           // entities JSON 数组字符串
+    val entities: String? = null,
+    val replyToJson: String? = null   // 引用的原始消息 JSON
 )

@@ -55,9 +55,8 @@ class PollingService : Service() {
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 if (response.isSuccessful) {
-                    // 只要成功响应，网络即正常
                     NetworkStateHolder.updateState(true)
-                    val body = response.body?.string() ?: ""
+                    val body = response.body?.string() ?: continue
                     val json = JSONObject(body)
                     if (json.getBoolean("ok")) {
                         val results = json.getJSONArray("result")
@@ -93,9 +92,8 @@ class PollingService : Service() {
         val date = msg.getLong("date") * 1000
 
         val messageText = extractMessageText(msg)
-        val entitiesJson = if (msg.has("entities")) {
-            msg.getJSONArray("entities").toString()
-        } else null
+        val entitiesJson = if (msg.has("entities")) msg.getJSONArray("entities").toString() else null
+        val replyToJson = if (msg.has("reply_to_message")) msg.getJSONObject("reply_to_message").toString() else null
 
         val existingChat = chatRepository.getChatById(chatId)
         val existingAvatarUrl = existingChat?.avatarUrl
@@ -130,7 +128,8 @@ class PollingService : Service() {
                 date = msg.getLong("date"),
                 isOutgoing = false,
                 rawJson = msg.toString(),
-                entities = entitiesJson
+                entities = entitiesJson,
+                replyToJson = replyToJson
             )
         )
 
@@ -154,12 +153,8 @@ class PollingService : Service() {
             val name = user.optString("first_name", "用户")
             return "$name 离开了群组"
         }
-        if (msg.has("group_chat_created")) {
-            return "群组已创建"
-        }
-        if (msg.has("new_chat_title")) {
-            return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
-        }
+        if (msg.has("group_chat_created")) return "群组已创建"
+        if (msg.has("new_chat_title")) return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
         if (msg.has("text")) return msg.getString("text")
         if (msg.has("sticker")) {
             val sticker = msg.getJSONObject("sticker")

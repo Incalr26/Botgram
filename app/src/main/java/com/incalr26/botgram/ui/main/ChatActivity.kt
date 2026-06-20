@@ -157,25 +157,32 @@ class ChatActivity : AppCompatActivity() {
             container.addView(itemView)
         }
 
+        // 测量菜单尺寸
         container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupHeight = container.measuredHeight
 
+        // 获取气泡视图（用于对齐）
         val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
         val bubbleLocation = IntArray(2)
         bubble.getLocationOnScreen(bubbleLocation)
         val bubbleTop = bubbleLocation[1]
         val bubbleLeft = bubbleLocation[0]
-        val bubbleBottom = bubbleTop + bubble.height
+        val bubbleHeight = bubble.height
 
         val anchorLocation = IntArray(2)
         anchor.getLocationOnScreen(anchorLocation)
         val xOff = bubbleLeft - anchorLocation[0]
 
         val screenHeight = resources.displayMetrics.heightPixels
-        val yOff = if (bubbleBottom + popupHeight > screenHeight) {
-            -popupHeight - bubble.height
-        } else {
-            0
+
+        // 默认 yOff（显示在锚点下方）
+        var yOff = 0
+        // 锚点底部坐标
+        val anchorBottom = anchorLocation[1] + anchor.height
+
+        // 若气泡底部 + 菜单高度 > 屏幕高度，则显示在上方：菜单底部紧贴气泡顶部
+        if (bubbleLocation[1] + bubbleHeight + popupHeight > screenHeight) {
+            yOff = bubbleTop - popupHeight - anchorBottom
         }
 
         popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
