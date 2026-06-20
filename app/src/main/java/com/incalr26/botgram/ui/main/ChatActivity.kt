@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -37,6 +38,8 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var adapter: MessageAdapter
     private lateinit var recyclerView: RecyclerView
     private var chatId: Long = 0
+    private var replyToMessageId: Long? = null
+    private var chatType: String = "private"
 
     private val crashHandler = CoroutineExceptionHandler { _, throwable ->
         gotoCrash(throwable)
@@ -54,6 +57,9 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_chat)
+
+            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
@@ -91,7 +97,8 @@ class ChatActivity : AppCompatActivity() {
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
                 if (text.isNotEmpty()) {
-                    sendTextMessage(text)
+                    sendTextMessage(text, replyToMessageId)
+                    replyToMessageId = null
                     messageInput.text.clear()
                 }
             }
@@ -114,129 +121,9 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun showMessageMenu(message: MessageEntity, anchor: View) {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
-            elevation = 12f * resources.displayMetrics.density
-            clipToOutline = true
-        }
-
-        val typedValue = TypedValue()
-        theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
-        val textColor = typedValue.data
-        theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
-        val primaryColor = typedValue.data
-
-        val items = mutableListOf(
-            Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_plus_one_outline, 2)
-        )
-        if (message.isOutgoing) {
-            items.add(Triple("撤回", R.drawable.ic_revoke, 3))
-        }
-
-        val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
-            isOutsideTouchable = true
-            isFocusable = true
-            setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent))
-        }
-
-        items.forEach { (title, iconRes, action) ->
-            val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            val icon = itemView.findViewById<ImageView>(R.id.menu_icon)
-            val text = itemView.findViewById<TextView>(R.id.menu_text)
-            icon.setImageResource(iconRes)
-            icon.setColorFilter(primaryColor)
-            text.text = title
-            text.setTextColor(textColor)
-            itemView.setOnClickListener {
-                handleMenuAction(action, message)
-                popupWindow.dismiss()
-            }
-            container.addView(itemView)
-        }
-
-        // 测量菜单尺寸
-        container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-        val popupHeight = container.measuredHeight
-
-        // 获取气泡视图（用于对齐）
-        val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
-        val bubbleLocation = IntArray(2)
-        bubble.getLocationOnScreen(bubbleLocation)
-        val bubbleTop = bubbleLocation[1]
-        val bubbleLeft = bubbleLocation[0]
-        val bubbleHeight = bubble.height
-
-        val anchorLocation = IntArray(2)
-        anchor.getLocationOnScreen(anchorLocation)
-        val xOff = bubbleLeft - anchorLocation[0]
-
-        val screenHeight = resources.displayMetrics.heightPixels
-
-        // 默认 yOff（显示在锚点下方）
-        var yOff = 0
-        // 锚点底部坐标
-        val anchorBottom = anchorLocation[1] + anchor.height
-
-        // 若气泡底部 + 菜单高度 > 屏幕高度，则显示在上方：菜单底部紧贴气泡顶部
-        if (bubbleLocation[1] + bubbleHeight + popupHeight > screenHeight) {
-            yOff = bubbleTop - popupHeight - anchorBottom
-        }
-
-        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
-    }
-
-    private fun handleMenuAction(action: Int, message: MessageEntity) {
-        when (action) {
-            1 -> {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
-                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
-            }
-            2 -> handleRepeat(message.text ?: "")
-            3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
-        }
-    }
-
-    private fun handleRepeat(text: String) {
-        val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-        val needConfirm = prefs.getBoolean("repeat_confirm", true)
-        if (needConfirm) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("复读确认")
-                .setMessage("确定要复读这条消息吗？")
-                .setPositiveButton("确定") { _, _ -> sendTextMessage(text) }
-                .setNegativeButton("取消", null)
-                .show()
-        } else {
-            sendTextMessage(text)
-        }
-    }
-
-    private suspend fun deleteMessage(messageId: Long) {
-        try {
-            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return
-            val url = "https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId"
-            val request = Request.Builder().url(url).build()
-            val response = ApiClient.getClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "消息已撤回", Toast.LENGTH_SHORT).show()
-                    loadMessages()
-                }
-            } else {
-                val body = response.body?.string() ?: ""
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "撤回失败: $body", Toast.LENGTH_LONG).show()
-                }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@ChatActivity, "撤回失败: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     private suspend fun loadTitleAndType() {
@@ -258,6 +145,7 @@ class ChatActivity : AppCompatActivity() {
 
         withContext(Dispatchers.Main) {
             if (chat != null) {
+                chatType = chat.type
                 val name = if (chat.type == "private") {
                     chat.firstName ?: chat.username ?: "私聊"
                 } else {
@@ -291,27 +179,154 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
-    }
-
-    private fun gotoCrash(throwable: Throwable) {
-        val intent = Intent(this, CrashActivity::class.java).apply {
-            putExtra("stack_trace", android.util.Log.getStackTraceString(throwable))
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+    private fun showMessageMenu(message: MessageEntity, anchor: View) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
+            elevation = 12f * resources.displayMetrics.density
+            clipToOutline = true
         }
-        startActivity(intent)
-        finish()
+
+        val typedValue = TypedValue()
+        theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
+        val textColor = typedValue.data
+        theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+        val primaryColor = typedValue.data
+
+        val items = mutableListOf(
+            Triple("复制", R.drawable.ic_copy, 1),
+            Triple("复读", R.drawable.ic_plus_one_outline, 2),
+            Triple("回复", R.drawable.ic_reply, 4)
+        )
+        if (chatType != "private") {
+            items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
+        }
+        if (message.isOutgoing) {
+            items.add(Triple("撤回", R.drawable.ic_revoke, 3))
+        }
+
+        val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+            isOutsideTouchable = true
+            isFocusable = true
+            setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent))
+        }
+
+        items.forEach { (title, iconRes, action) ->
+            val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
+            val icon = itemView.findViewById<ImageView>(R.id.menu_icon)
+            val text = itemView.findViewById<TextView>(R.id.menu_text)
+            icon.setImageResource(iconRes)
+            icon.setColorFilter(primaryColor)
+            text.text = title
+            text.setTextColor(textColor)
+            itemView.setOnClickListener {
+                handleMenuAction(action, message)
+                popupWindow.dismiss()
+            }
+            container.addView(itemView)
+        }
+
+        container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popupHeight = container.measuredHeight
+
+        val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
+        val bubbleLocation = IntArray(2)
+        bubble.getLocationOnScreen(bubbleLocation)
+        val bubbleTop = bubbleLocation[1]
+        val bubbleLeft = bubbleLocation[0]
+        val bubbleHeight = bubble.height
+
+        val anchorLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        val xOff = bubbleLeft - anchorLocation[0]
+
+        val screenHeight = resources.displayMetrics.heightPixels
+        var yOff = 0
+        val anchorBottom = anchorLocation[1] + anchor.height
+        if (bubbleLocation[1] + bubbleHeight + popupHeight > screenHeight) {
+            yOff = bubbleTop - popupHeight - anchorBottom
+        }
+
+        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
     }
 
-    private fun sendTextMessage(text: String) {
+    private fun handleMenuAction(action: Int, message: MessageEntity) {
+        when (action) {
+            1 -> {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
+                Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
+            }
+            2 -> handleRepeat(message.text ?: "")
+            3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
+            4 -> {
+                replyToMessageId = message.messageId
+                val input = findViewById<EditText>(R.id.messageInput)
+                input.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(input, 0)
+                Toast.makeText(this, "回复模式已开启", Toast.LENGTH_SHORT).show()
+            }
+            5 -> {
+                val link = if (chatId < 0) {
+                    "https://t.me/c/${chatId.toString().removePrefix("-100")}/${message.messageId}"
+                } else {
+                    "https://t.me/c/${chatId}/${message.messageId}"
+                }
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("link", link))
+                Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun handleRepeat(text: String) {
+        val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+        val needConfirm = prefs.getBoolean("repeat_confirm", true)
+        if (needConfirm) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("复读确认")
+                .setMessage("确定要复读这条消息吗？")
+                .setPositiveButton("确定") { _, _ -> sendTextMessage(text, null) }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            sendTextMessage(text, null)
+        }
+    }
+
+    private suspend fun deleteMessage(messageId: Long) {
+        try {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return
+            val url = "https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId"
+            val request = Request.Builder().url(url).build()
+            val response = ApiClient.getClient().newCall(request).execute()
+            if (response.isSuccessful) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "消息已撤回", Toast.LENGTH_SHORT).show()
+                    loadMessages()
+                }
+            } else {
+                val body = response.body?.string() ?: ""
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "撤回失败: $body", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@ChatActivity, "撤回失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun sendTextMessage(text: String, replyTo: Long?) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val url = "https://api.telegram.org/bot$token/sendMessage"
             val jsonBody = JSONObject().apply {
                 put("chat_id", chatId)
                 put("text", text)
+                replyTo?.let { put("reply_to_message_id", it) }
             }
             val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
             val request = Request.Builder().url(url).post(requestBody).build()
@@ -342,11 +357,25 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private fun gotoCrash(throwable: Throwable) {
+        val intent = Intent(this, CrashActivity::class.java).apply {
+            putExtra("stack_trace", android.util.Log.getStackTraceString(throwable))
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        startActivity(intent)
+        finish()
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == android.R.id.home) {
             finish()
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
     }
 }

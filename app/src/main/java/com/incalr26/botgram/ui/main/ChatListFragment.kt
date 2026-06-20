@@ -13,7 +13,6 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.repository.ChatRepository
@@ -21,7 +20,6 @@ import com.incalr26.botgram.data.repository.ChatRepository
 class ChatListFragment : Fragment() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var adapter: ChatAdapter
-    private lateinit var swipeRefresh: SwipeRefreshLayout
 
     private val newMsgReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -40,7 +38,6 @@ class ChatListFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val recyclerView = view.findViewById<RecyclerView>(R.id.chatRecyclerView)
         val emptyHint = view.findViewById<View>(R.id.emptyHint)
-        swipeRefresh = view.findViewById(R.id.swipeRefresh)
 
         chatRepository = ChatRepository(BotApp.instance.databaseHelper)
         adapter = ChatAdapter { chat ->
@@ -57,11 +54,7 @@ class ChatListFragment : Fragment() {
         })
         chatRepository.refreshChats()
 
-        swipeRefresh.setOnRefreshListener {
-            chatRepository.refreshChats()
-            swipeRefresh.isRefreshing = false
-        }
-
+        // 注册广播接收新消息
         ContextCompat.registerReceiver(
             requireContext(),
             newMsgReceiver,

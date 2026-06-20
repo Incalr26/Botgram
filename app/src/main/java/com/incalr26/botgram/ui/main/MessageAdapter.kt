@@ -32,6 +32,7 @@ class MessageAdapter(
         val senderName: TextView = view.findViewById(R.id.senderName)
         val messageText: TextView = view.findViewById(R.id.messageText)
         val messageInfo: TextView = view.findViewById(R.id.messageInfo)
+        val replyContainer: LinearLayout = view.findViewById(R.id.replyContainer)
         val replyPreview: TextView = view.findViewById(R.id.replyPreview)
         val container: LinearLayout = view as LinearLayout
         var boundMessageId: Long = 0L
@@ -54,11 +55,9 @@ class MessageAdapter(
             holder.avatarFallback.visibility = View.GONE
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_RTL
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
-            holder.replyPreview.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
-            holder.replyPreview.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -67,19 +66,19 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
-        // 显示引用
+        // 设置引用预览
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)
                 val replyText = replyMsg.optString("text", null) ?: "[媒体消息]"
                 val replySender = replyMsg.optJSONObject("from")?.optString("first_name") ?: "未知"
-                holder.replyPreview.visibility = View.VISIBLE
+                holder.replyContainer.visibility = View.VISIBLE
                 holder.replyPreview.text = "$replySender: $replyText"
             } catch (e: Exception) {
-                holder.replyPreview.visibility = View.GONE
+                holder.replyContainer.visibility = View.GONE
             }
         } else {
-            holder.replyPreview.visibility = View.GONE
+            holder.replyContainer.visibility = View.GONE
         }
 
         holder.senderName.text = message.senderName ?: "未知"
@@ -124,7 +123,6 @@ class MessageAdapter(
             holder.loadJob?.cancel()
         }
 
-        // 设置点击/长按事件
         holder.itemView.setOnClickListener { onClick?.invoke(message) }
         holder.itemView.setOnLongClickListener { view ->
             onLongClick?.invoke(message, view) ?: false

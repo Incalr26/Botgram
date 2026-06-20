@@ -155,17 +155,28 @@ class PollingService : Service() {
         }
         if (msg.has("group_chat_created")) return "群组已创建"
         if (msg.has("new_chat_title")) return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
+
+        // 文本消息
         if (msg.has("text")) return msg.getString("text")
-        if (msg.has("sticker")) {
-            val sticker = msg.getJSONObject("sticker")
-            val emoji = sticker.optString("emoji", "")
-            return if (emoji.isNotEmpty()) "贴纸 $emoji" else "贴纸"
+
+        // 媒体消息提取 caption
+        val caption = msg.optString("caption", null)
+        val captionSuffix = if (!caption.isNullOrEmpty()) " $caption" else ""
+
+        return when {
+            msg.has("sticker") -> {
+                val sticker = msg.getJSONObject("sticker")
+                val emoji = sticker.optString("emoji", "")
+                if (emoji.isNotEmpty()) "贴纸 $emoji$captionSuffix" else "贴纸$captionSuffix"
+            }
+            msg.has("photo") -> "[图片]$captionSuffix"
+            msg.has("document") -> "[文件]$captionSuffix"
+            msg.has("video") -> "[视频]$captionSuffix"
+            msg.has("audio") -> "[音频]$captionSuffix"
+            msg.has("voice") -> "[语音]$captionSuffix"
+            msg.has("video_note") -> "[视频消息]$captionSuffix"
+            else -> "[媒体消息]$captionSuffix"
         }
-        if (msg.has("photo")) return "[图片]"
-        if (msg.has("document")) return "[文件]"
-        if (msg.has("video")) return "[视频]"
-        if (msg.has("audio") || msg.has("voice")) return "[语音]"
-        return "[媒体消息]"
     }
 
     private fun createNotification(): Notification {
