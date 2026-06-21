@@ -73,35 +73,31 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
-        // 构建发送者名称（身份 + 标签）
-        val nameParts = mutableListOf<String>()
-        message.senderName?.let { nameParts.add(it) }
-
+        // ---------- 线性化高容错名称与标签拼接 ----------
+        val nameBuilder = StringBuilder(message.senderName ?: "未知")
         val role = message.senderRole ?: ""
         val title = message.senderTitle
 
-        when (role) {
-            "creator" -> nameParts.add("[群主]")
-            "administrator" -> nameParts.add("[管理员]")
-        }
+        val isAdmin = role == "creator" || role == "administrator" || role == "owner"
+        val hasTitle = !title.isNullOrBlank()
 
-        // 标签处理
-        if (!title.isNullOrEmpty()) {
-            if (role == "creator" || role == "administrator") {
-                // 管理员：将标签合并到身份括号内
-                val last = nameParts.lastOrNull()
-                if (last != null && (last == "[群主]" || last == "[管理员]")) {
-                    nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " $title]"
-                }
+        if (isAdmin) {
+            val roleTag = if (role == "creator" || role == "owner") "群主" else "管理员"
+            if (hasTitle) {
+                nameBuilder.append(" [$roleTag $title]")
             } else {
-                // 普通成员：显示 [普通成员 标签]
-                nameParts.add("[普通成员 $title]")
+                nameBuilder.append(" [$roleTag]")
+            }
+        } else {
+            if (hasTitle) {
+                nameBuilder.append(" [$title]")
             }
         }
 
-        holder.senderName.text = nameParts.joinToString(" ")
+        holder.senderName.text = nameBuilder.toString()
+        // ---------- 结束名称拼接 ----------
 
-        // 引用预览（保持不变）
+        // 引用预览
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)
@@ -116,7 +112,7 @@ class MessageAdapter(
             holder.replyContainer.visibility = View.GONE
         }
 
-        // 消息文本及链接（保持不变）
+        // 消息文本及链接
         val rawText = message.text ?: ""
         val formatted = MessageFormatter.format(rawText, message.entities)
         val spannable = formatted as Spannable
@@ -147,7 +143,7 @@ class MessageAdapter(
         holder.messageText.text = spannable
         holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
 
-        // 日期格式（保持不变）
+        // 日期
         val now = Calendar.getInstance()
         val msgCal = Calendar.getInstance().apply { timeInMillis = message.date * 1000 }
         val year = msgCal.get(Calendar.YEAR)
@@ -162,7 +158,7 @@ class MessageAdapter(
         val timeStr = timeFormat.format(Date(message.date * 1000))
         holder.messageInfo.text = "ID:${message.messageId}  $dateStr $timeStr"
 
-        // 头像加载（保持不变）
+        // 头像
         val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
         val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
         if (!isOutgoing && useRealAvatar) {
