@@ -99,7 +99,7 @@ class PollingService : Service() {
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
 
-        // 群组中获取成员身份，失败或非群组则默认 member
+        // 获取身份和标签（仅群组）
         var senderRole: String? = null
         var senderTitle: String? = null
         if (chatType != "private" && senderId != null) {
@@ -118,7 +118,6 @@ class PollingService : Service() {
                     }
                 }
             } catch (_: Exception) {}
-            // 如果仍未获取到角色，至少设为 member
             if (senderRole.isNullOrEmpty()) senderRole = "member"
         }
 
@@ -141,7 +140,6 @@ class PollingService : Service() {
         chatRepository.insertOrUpdateChat(chatEntity)
 
         val messageId = msg.getLong("message_id")
-
         messageRepository.insertMessage(
             MessageEntity(
                 messageId = messageId,

@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.incalr26.botgram.databinding.ActivityLoginBinding
 import com.incalr26.botgram.data.remote.ApiClient
-import com.incalr26.botgram.service.PollingService
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -19,7 +18,7 @@ class LoginActivity : AppCompatActivity() {
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 检查是否已登录，若已有 token 则直接跳转
+        // 已保存 token 则直接进入主界面
         val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
             .getString("bot_token", null)
         if (!token.isNullOrBlank()) {
@@ -70,10 +69,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun startMainAndFinish() {
-        // 启动监听服务
-        val serviceIntent = Intent(this, PollingService::class.java)
-        startForegroundService(serviceIntent)
-
+        // 仅跳转主界面，服务启动交予 MainActivity（确保在前台）
         startActivity(Intent(this, com.incalr26.botgram.ui.main.MainActivity::class.java))
         finish()
     }

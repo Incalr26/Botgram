@@ -11,12 +11,15 @@ import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.repository.ChatRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class ChatListFragment : Fragment() {
     private lateinit var chatRepository: ChatRepository
@@ -25,7 +28,9 @@ class ChatListFragment : Fragment() {
 
     private val newMsgReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            chatRepository.refreshChats()
+            lifecycleScope.launch(Dispatchers.IO) {
+                chatRepository.refreshChats()
+            }
         }
     }
 
@@ -58,7 +63,9 @@ class ChatListFragment : Fragment() {
         })
 
         swipeRefresh.setOnRefreshListener {
-            chatRepository.refreshChats()
+            lifecycleScope.launch(Dispatchers.IO) {
+                chatRepository.refreshChats()
+            }
         }
 
         ContextCompat.registerReceiver(
@@ -71,8 +78,9 @@ class ChatListFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // 每次回到页面强制刷新，保证未读数和最新消息更新
-        chatRepository.refreshChats()
+        lifecycleScope.launch(Dispatchers.IO) {
+            chatRepository.refreshChats()
+        }
     }
 
     override fun onDestroyView() {

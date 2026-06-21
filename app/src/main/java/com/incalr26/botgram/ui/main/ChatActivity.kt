@@ -48,7 +48,10 @@ class ChatActivity : AppCompatActivity() {
     private val messageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.getLongExtra("chatId", 0) == chatId) {
-                loadMessages()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    delay(100)
+                    loadMessagesInternal()
+                }
             }
         }
     }
@@ -57,10 +60,6 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_chat)
-
-            // 恢复状态栏占位高度，避免留白
-            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
@@ -119,6 +118,7 @@ class ChatActivity : AppCompatActivity() {
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
+            // 广播注册，兼容 Android 14+
             ContextCompat.registerReceiver(
                 this,
                 messageReceiver,
@@ -138,11 +138,6 @@ class ChatActivity : AppCompatActivity() {
         val preview = message.text?.take(50) ?: ""
         textView.text = "回复 $name: $preview"
         banner.visibility = View.VISIBLE
-    }
-
-    private fun getStatusBarHeight(): Int {
-        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
-        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     private suspend fun loadTitleAndType() {
@@ -187,8 +182,9 @@ class ChatActivity : AppCompatActivity() {
     private suspend fun loadMessagesInternal() {
         val messages = messageRepository.getMessages(chatId)
         withContext(Dispatchers.Main) {
-            adapter.submitList(messages)
-            recyclerView.scrollToPosition(adapter.itemCount - 1) // 确保滚动到底部
+            adapter.submitList(messages) {
+                recyclerView.scrollToPosition(adapter.itemCount - 1)
+            }
         }
     }
 

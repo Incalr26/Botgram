@@ -1,7 +1,11 @@
 package com.incalr26.botgram.ui.main
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
@@ -12,15 +16,18 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
@@ -29,6 +36,8 @@ import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.BuildConfig
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.remote.ApiClient
+import com.incalr26.botgram.data.repository.ChatRepository
+import com.incalr26.botgram.service.PollingService
 import com.incalr26.botgram.ui.login.LoginActivity
 import com.incalr26.botgram.ui.settings.SettingsActivity
 import com.incalr26.botgram.util.AvatarHelper
@@ -44,10 +53,36 @@ class MainActivity : AppCompatActivity() {
     private lateinit var contentLayout: View
     private var downX = 0f
 
+    private val chatRepo by lazy { ChatRepository(BotApp.instance.databaseHelper) }
+
+    private val refreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                chatRepo.refreshChats()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // 启动消息监听服务（前台，确保兼容）
+        val serviceIntent = Intent(this, PollingService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+
+        // 注册广播（兼容 Android 14+）
+        ContextCompat.registerReceiver(
+            this,
+            refreshReceiver,
+            IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -109,7 +144,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_about -> showAboutDialog()
                 R.id.nav_logout -> {
                     getSharedPreferences("botgram_prefs", MODE_PRIVATE).edit().remove("bot_token").apply()
-                    stopService(Intent(this, com.incalr26.botgram.service.PollingService::class.java))
+                    stopService(Intent(this, PollingService::class.java))
                     AvatarHelper.clearCache()
                     startActivity(Intent(this, LoginActivity::class.java))
                     finish()
@@ -121,6 +156,19 @@ class MainActivity : AppCompatActivity() {
 
         NetworkStateHolder.isConnected.observe(this, Observer { connected ->
             networkBar.visibility = if (connected) View.GONE else View.VISIBLE
+        })
+
+        // 取代 onBackPressed，兼容新版手势
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (drawerLayout.isDrawerOpen(Gravity.LEFT)) {
+                    drawerLayout.closeDrawer(Gravity.LEFT)
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
         })
     }
 
@@ -205,17 +253,17 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     val headerView = navigationView.getHeaderView(0)
-                    headerView.findViewById<TextView>(R.id.botName).text = firstName
-                    headerView.findViewById<TextView>(R.id.botUsername).text = if (username != null) "@$username" else "无用户名"
-                    headerView.findViewById<TextView>(R.id.botDescription).text = description ?: ""
+                    headerView.findViewById<TextView>(R.id.botName)?.text = firstName
+                    headerView.findViewById<TextView>(R.id.botUsername)?.text = if (username != null) "@$username" else "无用户名"
+                    headerView.findViewById<TextView>(R.id.botDescription)?.text = description ?: ""
 
                     val avatarView = headerView.findViewById<ImageView>(R.id.botAvatar)
                     val fallbackView = headerView.findViewById<TextView>(R.id.botAvatarFallback)
                     val fallback = firstName.take(1).uppercase()
-                    fallbackView.text = fallback
+                    fallbackView?.text = fallback
 
                     val url = AvatarHelper.getUserAvatar(botId)
-                    if (!url.isNullOrEmpty()) {
+                    if (!url.isNullOrEmpty() && avatarView != null && fallbackView != null) {
                         val request = ImageRequest.Builder(this@MainActivity)
                             .data(url)
                             .crossfade(true)
@@ -239,9 +287,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(navigationView)) drawerLayout.closeDrawer(navigationView)
-        else super.onBackPressed()
+    override fun onDestroy() {
+        super.onDestroy()
+        try { unregisterReceiver(refreshReceiver) } catch (_: Exception) {}
     }
 
     private fun updateNetworkStatus() {}

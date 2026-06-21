@@ -15,7 +15,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 3
-        versionName "0.0.3-k"
+        versionName "0.0.3-l8"
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
         buildConfigField "long", "BUILD_TIME_MILLIS", "${buildTimeMillis}L"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

@@ -66,30 +66,37 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
-        // 构建发送者名称（身份 + 标签）
+        // 构建显示名称：名称 + [身份] + [标签]
         val nameParts = mutableListOf<String>()
         message.senderName?.let { nameParts.add(it) }
-        if (!message.senderRole.isNullOrEmpty()) {
-            when (message.senderRole) {
-                "creator" -> nameParts.add("[群主]")
-                "administrator" -> nameParts.add("[管理员]")
-                // "member" 不显示
-            }
+
+        val role = message.senderRole ?: ""
+        val title = message.senderTitle
+
+        // 添加身份括号
+        when (role) {
+            "creator" -> nameParts.add("[群主]")
+            "administrator" -> nameParts.add("[管理员]")
+            // member 不添加身份
         }
-        if (!message.senderTitle.isNullOrEmpty() && (message.senderRole == "creator" || message.senderRole == "administrator")) {
-            // 标签紧跟在身份后面，格式 [管理员 标签]
-            val last = nameParts.lastOrNull()
-            if (last != null && (last == "[群主]" || last == "[管理员]")) {
-                nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " ${message.senderTitle}]"
+
+        // 处理标签
+        if (!title.isNullOrEmpty()) {
+            if (role == "creator" || role == "administrator") {
+                // 将标签追加到身份括号内 [管理员 标签]
+                val last = nameParts.lastOrNull()
+                if (last != null && (last == "[群主]" || last == "[管理员]")) {
+                    nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " $title]"
+                }
             } else {
-                nameParts.add("[${message.senderTitle}]")
+                // 普通成员或未知角色，单独添加标签
+                nameParts.add("[$title]")
             }
-        } else if (!message.senderTitle.isNullOrEmpty() && message.senderRole != "member") {
-            nameParts.add("[${message.senderTitle}]")
         }
+
         holder.senderName.text = nameParts.joinToString(" ")
 
-        // 设置引用预览
+        // 引用预览
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)

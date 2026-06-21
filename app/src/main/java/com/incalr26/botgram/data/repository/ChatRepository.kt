@@ -22,7 +22,7 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
         return token.hashCode().toString()
     }
 
-    fun refreshChats() {
+    suspend fun refreshChats() = withContext(Dispatchers.IO) {
         val db = dbHelper.readableDatabase
         val hash = currentHash()
         val cursor: Cursor = db.query(
@@ -76,7 +76,6 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
         refreshChats()
     }
 
-    // 其他方法保持不变，但 updateUnreadCount 等也需要加入 hash 条件，避免误改其他 bot 的数据
     suspend fun updateUnreadCount(chatId: Long, count: Int) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
         val hash = currentHash()
