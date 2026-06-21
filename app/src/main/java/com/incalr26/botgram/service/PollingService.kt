@@ -17,6 +17,7 @@ import com.incalr26.botgram.util.NetworkStateHolder
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 class PollingService : Service() {
 
@@ -24,6 +25,8 @@ class PollingService : Service() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
+
+    private val customTitleCache = ConcurrentHashMap<String, String?>()
 
     override fun onCreate() {
         super.onCreate()
@@ -99,26 +102,32 @@ class PollingService : Service() {
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
 
-        // 获取身份和标签（仅群组）
         var senderRole: String? = null
         var senderTitle: String? = null
         if (chatType != "private" && senderId != null) {
-            try {
-                val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
-                    .getString("bot_token", "") ?: ""
-                val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
-                val memberReq = Request.Builder().url(memberUrl).build()
-                val memberRes = ApiClient.getClient().newCall(memberReq).execute()
-                if (memberRes.isSuccessful) {
-                    val memberJson = JSONObject(memberRes.body?.string() ?: "")
-                    if (memberJson.getBoolean("ok")) {
-                        val result = memberJson.getJSONObject("result")
-                        senderRole = result.optString("status", "member")
-                        senderTitle = result.optString("custom_title", null)
+            val cacheKey = "${chatId}_${senderId}"
+            if (customTitleCache.containsKey(cacheKey)) {
+                senderRole = "member"
+                senderTitle = customTitleCache[cacheKey]
+            } else {
+                try {
+                    val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+                        .getString("bot_token", "") ?: ""
+                    val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
+                    val memberReq = Request.Builder().url(memberUrl).build()
+                    val memberRes = ApiClient.getClient().newCall(memberReq).execute()
+                    if (memberRes.isSuccessful) {
+                        val memberJson = JSONObject(memberRes.body?.string() ?: "")
+                        if (memberJson.getBoolean("ok")) {
+                            val result = memberJson.getJSONObject("result")
+                            senderRole = result.optString("status", "member")
+                            senderTitle = result.optString("custom_title", null)
+                            customTitleCache[cacheKey] = senderTitle
+                        }
                     }
-                }
-            } catch (_: Exception) {}
-            if (senderRole.isNullOrEmpty()) senderRole = "member"
+                } catch (_: Exception) {}
+                if (senderRole.isNullOrEmpty()) senderRole = "member"
+            }
         }
 
         val existingChat = chatRepository.getChatById(chatId)

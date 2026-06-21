@@ -68,6 +68,7 @@ class ChatListFragment : Fragment() {
             }
         }
 
+        //  使用 ContextCompat.registerReceiver 并指定 RECEIVER_NOT_EXPORTED
         ContextCompat.registerReceiver(
             requireContext(),
             newMsgReceiver,
@@ -76,6 +77,7 @@ class ChatListFragment : Fragment() {
         )
     }
 
+    //  添加 onResume 强制刷新
     override fun onResume() {
         super.onResume()
         lifecycleScope.launch(Dispatchers.IO) {
@@ -85,8 +87,6 @@ class ChatListFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        try {
-            requireContext().unregisterReceiver(newMsgReceiver)
-        } catch (_: Exception) {}
+        try { requireContext().unregisterReceiver(newMsgReceiver) } catch (_: Exception) {}
     }
 }

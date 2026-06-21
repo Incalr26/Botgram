@@ -16,6 +16,9 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -58,10 +61,16 @@ class ChatActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         try {
             setContentView(R.layout.activity_chat)
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
+            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
+                val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+                v.setPadding(v.paddingLeft, statusBars.top, v.paddingRight, v.paddingBottom)
+                insets
+            }
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
@@ -118,17 +127,24 @@ class ChatActivity : AppCompatActivity() {
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
-            // 广播注册，兼容 Android 14+
-            ContextCompat.registerReceiver(
-                this,
-                messageReceiver,
-                IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
-                ContextCompat.RECEIVER_NOT_EXPORTED
-            )
-
         } catch (e: Exception) {
             gotoCrash(e)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ContextCompat.registerReceiver(
+            this,
+            messageReceiver,
+            IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
     }
 
     private fun setReplyBanner(message: MessageEntity) {
