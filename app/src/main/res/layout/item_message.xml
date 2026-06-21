@@ -36,17 +36,18 @@
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp">
 
-        <!-- 引用预览：左侧竖线 + 文本 -->
+        <!-- 引用预览 -->
         <LinearLayout
             android:id="@+id/replyContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:visibility="gone"
-            android:layout_marginBottom="4dp">
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/quote_background">
 
             <View
-                android:layout_width="3dp"
+                android:layout_width="4dp"
                 android:layout_height="match_parent"
                 android:background="?attr/colorPrimary" />
 
@@ -54,13 +55,12 @@
                 android:id="@+id/replyPreview"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="8dp"
                 android:textSize="13sp"
                 android:textColor="?attr/colorOnSurface"
                 android:maxLines="3"
                 android:ellipsize="end"
-                android:padding="6dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:padding="6dp" />
         </LinearLayout>
 
         <TextView

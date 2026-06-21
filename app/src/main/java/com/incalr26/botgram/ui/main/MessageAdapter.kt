@@ -1,5 +1,11 @@
 package com.incalr26.botgram.ui.main
 
+import android.content.Intent
+import android.text.Spannable
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.ClickableSpan
+import android.text.style.URLSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.util.AvatarHelper
@@ -66,30 +73,29 @@ class MessageAdapter(
             holder.avatar.setImageDrawable(null)
         }
 
-        // 构建显示名称：名称 + [身份] + [标签]
+        // 构建发送者名称（身份 + 标签）
         val nameParts = mutableListOf<String>()
         message.senderName?.let { nameParts.add(it) }
 
         val role = message.senderRole ?: ""
         val title = message.senderTitle
 
-        // 添加身份括号
+        // 身份显示
         when (role) {
             "creator" -> nameParts.add("[群主]")
             "administrator" -> nameParts.add("[管理员]")
-            // member 不添加身份
         }
 
-        // 处理标签
+        // 标签处理
         if (!title.isNullOrEmpty()) {
             if (role == "creator" || role == "administrator") {
-                // 将标签追加到身份括号内 [管理员 标签]
+                // 合并标签到身份括号内
                 val last = nameParts.lastOrNull()
                 if (last != null && (last == "[群主]" || last == "[管理员]")) {
                     nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " $title]"
                 }
             } else {
-                // 普通成员或未知角色，单独添加标签
+                // 普通成员单独添加标签
                 nameParts.add("[$title]")
             }
         }
@@ -111,15 +117,56 @@ class MessageAdapter(
             holder.replyContainer.visibility = View.GONE
         }
 
+        // 消息文本格式化
         val rawText = message.text ?: ""
-        holder.messageText.text = MessageFormatter.format(rawText, message.entities)
-        val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        val timeStr = sdf.format(Date(message.date * 1000))
-        holder.messageInfo.text = "ID:${message.messageId}  $timeStr"
+        val formatted = MessageFormatter.format(rawText, message.entities)
+        val spannable = formatted as Spannable
+        val urlSpans = spannable.getSpans(0, formatted.length, URLSpan::class.java)
+        for (urlSpan in urlSpans) {
+            val start = spannable.getSpanStart(urlSpan)
+            val end = spannable.getSpanEnd(urlSpan)
+            spannable.removeSpan(urlSpan)
+            spannable.setSpan(object : ClickableSpan() {
+                override fun onClick(widget: View) {
+                    val url = urlSpan.url
+                    MaterialAlertDialogBuilder(holder.itemView.context)
+                        .setTitle("打开链接")
+                        .setMessage("是否打开以下链接？\n\n$url")
+                        .setPositiveButton("打开") { _, _ ->
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            holder.itemView.context.startActivity(intent)
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+                override fun updateDrawState(ds: TextPaint) {
+                    super.updateDrawState(ds)
+                    ds.isUnderlineText = true
+                }
+            }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        holder.messageText.text = spannable
+        holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
 
+        // 日期格式
+        val now = Calendar.getInstance()
+        val msgCal = Calendar.getInstance().apply { timeInMillis = message.date * 1000 }
+        val year = msgCal.get(Calendar.YEAR)
+        val currentYear = now.get(Calendar.YEAR)
+        val dateFormat = if (year == currentYear) {
+            SimpleDateFormat("MM月dd日", Locale.getDefault())
+        } else {
+            SimpleDateFormat("yy年MM月dd日", Locale.getDefault())
+        }
+        val dateStr = dateFormat.format(Date(message.date * 1000))
+        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        val timeStr = timeFormat.format(Date(message.date * 1000))
+
+        holder.messageInfo.text = "ID:${message.messageId}  $dateStr $timeStr"
+
+        // 头像加载
         val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
         val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
-
         if (!isOutgoing && useRealAvatar) {
             val userId = message.senderUserId
             if (userId != null) {

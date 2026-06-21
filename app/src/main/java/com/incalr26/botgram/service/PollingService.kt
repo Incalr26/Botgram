@@ -27,8 +27,11 @@ class PollingService : Service() {
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
 
-    // 缓存群成员标签，减少 API 调用
-    private val customTitleCache = ConcurrentHashMap<String, String?>()
+    // 缓存群成员信息（角色 + 标签，标签可以为空字符串，但不会缓存空字符串）
+    data class MemberInfo(val role: String, val title: String?)
+    private val memberCache = ConcurrentHashMap<String, MemberInfo>()
+    // 去重：正在请求的键集合
+    private val pendingRequests = ConcurrentHashMap.newKeySet<String>()
 
     override fun onCreate() {
         super.onCreate()
@@ -104,15 +107,19 @@ class PollingService : Service() {
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
 
-        // 获取身份和标签（仅群组）
         var senderRole: String? = null
         var senderTitle: String? = null
+
         if (chatType != "private" && senderId != null) {
             val cacheKey = "${chatId}_${senderId}"
-            if (customTitleCache.containsKey(cacheKey)) {
-                senderRole = "member"
-                senderTitle = customTitleCache[cacheKey]
-            } else {
+            val cached = memberCache[cacheKey]
+
+            if (cached != null && cached.title != null) {
+                // 缓存存在且标签非空，直接使用
+                senderRole = cached.role
+                senderTitle = cached.title
+            } else if (pendingRequests.add(cacheKey)) {
+                // 发起请求，避免重复
                 try {
                     val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
                         .getString("bot_token", "") ?: ""
@@ -123,13 +130,25 @@ class PollingService : Service() {
                         val memberJson = JSONObject(memberRes.body?.string() ?: "")
                         if (memberJson.getBoolean("ok")) {
                             val result = memberJson.getJSONObject("result")
-                            senderRole = result.optString("status", "member")
-                            senderTitle = result.optString("custom_title", null)
-                            customTitleCache[cacheKey] = senderTitle
+                            val role = result.optString("status", "member")
+                            val title = result.optString("custom_title", null)?.takeIf { it.isNotEmpty() }
+                            senderRole = role
+                            senderTitle = title
+                            // 缓存结果：标签非空时才存储，空字符串不缓存
+                            if (!title.isNullOrEmpty()) {
+                                memberCache[cacheKey] = MemberInfo(role, title)
+                            }
                         }
                     }
                 } catch (_: Exception) {}
+                finally {
+                    pendingRequests.remove(cacheKey)
+                }
                 if (senderRole.isNullOrEmpty()) senderRole = "member"
+            } else {
+                // 正在请求中，使用默认值
+                senderRole = "member"
+                senderTitle = null
             }
         }
 
@@ -169,7 +188,6 @@ class PollingService : Service() {
             )
         )
 
-        // 通过 LiveData 通知所有页面刷新
         NewMessageNotifier.newMessage.postValue(Unit)
     }
 

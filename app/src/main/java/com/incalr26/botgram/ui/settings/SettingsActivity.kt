@@ -18,7 +18,7 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        // 状态栏占位高度（与主页一致）
+        // 状态栏占位高度
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 

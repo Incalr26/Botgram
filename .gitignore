@@ -13,3 +13,4 @@ app/src/main/assets/
 *.jks
 *.keystore
 *.bak
+gradle.properties

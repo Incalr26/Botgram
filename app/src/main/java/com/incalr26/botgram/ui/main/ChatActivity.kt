@@ -14,7 +14,9 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Observer
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -45,18 +47,28 @@ class ChatActivity : AppCompatActivity() {
         gotoCrash(throwable)
     }
 
-    // 观察全局新消息通知
-    private val newMessageObserver = Observer<Unit> {
-        lifecycleScope.launch(Dispatchers.IO) {
-            delay(100)
-            loadMessagesInternal()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         try {
             setContentView(R.layout.activity_chat)
+
+            // 状态栏占位高度
+            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
+            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
+
+            // 键盘监听：仅给底部输入栏增加内边距
+            val rootView = findViewById<View>(android.R.id.content)
+            ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
+                val imeBars = insets.getInsets(WindowInsetsCompat.Type.ime())
+                val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+
+                val bottomBar: LinearLayout = findViewById(R.id.bottomBar)
+                val bottomPadding = if (imeBars.bottom > 0) imeBars.bottom else navBars.bottom
+                bottomBar.setPadding(bottomBar.paddingLeft, bottomBar.paddingTop, bottomBar.paddingRight, bottomPadding)
+
+                insets
+            }
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
@@ -115,17 +127,16 @@ class ChatActivity : AppCompatActivity() {
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
-            // 观察全局新消息
-            NewMessageNotifier.newMessage.observe(this, newMessageObserver)
+            NewMessageNotifier.newMessage.observe(this) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    delay(100)
+                    loadMessagesInternal()
+                }
+            }
 
         } catch (e: Exception) {
             gotoCrash(e)
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        NewMessageNotifier.newMessage.removeObserver(newMessageObserver)
     }
 
     private fun setReplyBanner(message: MessageEntity) {
@@ -135,6 +146,11 @@ class ChatActivity : AppCompatActivity() {
         val preview = message.text?.take(50) ?: ""
         textView.text = "回复 $name: $preview"
         banner.visibility = View.VISIBLE
+    }
+
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
     }
 
     private suspend fun loadTitleAndType() {

@@ -4,13 +4,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:fitsSystemWindows="true">
+    android:background="?attr/colorSurface">
+
+    <View
+        android:id="@+id/statusBarPlaceholder"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?attr/colorSurfaceVariant" />
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorSurfaceVariant"
+        app:elevation="8dp"
         app:title="聊天"
         app:titleTextColor="?attr/colorOnSurfaceVariant"
         app:navigationIcon="?attr/homeAsUpIndicator" />
@@ -48,7 +55,8 @@
         android:id="@+id/messagesRecyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:background="?attr/colorSurface" />
 
     <LinearLayout
         android:id="@+id/bottomBar"
@@ -77,12 +85,13 @@
 
         <ImageButton
             android:id="@+id/sendButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_marginStart="8dp"
             android:src="@drawable/ic_send"
             android:contentDescription="发送"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:scaleType="center" />
+            android:scaleType="centerInside"
+            android:padding="0dp" />
     </LinearLayout>
 </LinearLayout>

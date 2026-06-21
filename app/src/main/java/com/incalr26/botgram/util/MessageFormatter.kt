@@ -42,11 +42,13 @@ object MessageFormatter {
                     "mention" -> spannable.setSpan(UnderlineSpan(), offset, end, 0)
                     "text_mention" -> spannable.setSpan(StyleSpan(android.graphics.Typeface.BOLD), offset, end, 0)
                     "blockquote" -> {
-                        spannable.setSpan(QuoteSpan(0x33666666), offset, end, 0)
+                        spannable.setSpan(QuoteSpan(0xFF666666.toInt()), offset, end, 0)
+                        spannable.setSpan(BackgroundColorSpan(0x11000000), offset, end, 0)
                         spannable.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), offset, end, 0)
                     }
                     "expandable_blockquote" -> {
-                        spannable.setSpan(QuoteSpan(0x33666666), offset, end, 0)
+                        spannable.setSpan(QuoteSpan(0xFF666666.toInt()), offset, end, 0)
+                        spannable.setSpan(BackgroundColorSpan(0x11000000), offset, end, 0)
                     }
                 }
             }
