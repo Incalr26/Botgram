@@ -80,7 +80,6 @@ class MessageAdapter(
         val role = message.senderRole ?: ""
         val title = message.senderTitle
 
-        // 身份显示
         when (role) {
             "creator" -> nameParts.add("[群主]")
             "administrator" -> nameParts.add("[管理员]")
@@ -89,20 +88,20 @@ class MessageAdapter(
         // 标签处理
         if (!title.isNullOrEmpty()) {
             if (role == "creator" || role == "administrator") {
-                // 合并标签到身份括号内
+                // 管理员：将标签合并到身份括号内
                 val last = nameParts.lastOrNull()
                 if (last != null && (last == "[群主]" || last == "[管理员]")) {
                     nameParts[nameParts.lastIndex] = last.removeSuffix("]") + " $title]"
                 }
             } else {
-                // 普通成员单独添加标签
-                nameParts.add("[$title]")
+                // 普通成员：显示 [普通成员 标签]
+                nameParts.add("[普通成员 $title]")
             }
         }
 
         holder.senderName.text = nameParts.joinToString(" ")
 
-        // 引用预览
+        // 引用预览（保持不变）
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)
@@ -117,7 +116,7 @@ class MessageAdapter(
             holder.replyContainer.visibility = View.GONE
         }
 
-        // 消息文本格式化
+        // 消息文本及链接（保持不变）
         val rawText = message.text ?: ""
         val formatted = MessageFormatter.format(rawText, message.entities)
         val spannable = formatted as Spannable
@@ -148,7 +147,7 @@ class MessageAdapter(
         holder.messageText.text = spannable
         holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
 
-        // 日期格式
+        // 日期格式（保持不变）
         val now = Calendar.getInstance()
         val msgCal = Calendar.getInstance().apply { timeInMillis = message.date * 1000 }
         val year = msgCal.get(Calendar.YEAR)
@@ -161,10 +160,9 @@ class MessageAdapter(
         val dateStr = dateFormat.format(Date(message.date * 1000))
         val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val timeStr = timeFormat.format(Date(message.date * 1000))
-
         holder.messageInfo.text = "ID:${message.messageId}  $dateStr $timeStr"
 
-        // 头像加载
+        // 头像加载（保持不变）
         val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
         val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
         if (!isOutgoing && useRealAvatar) {

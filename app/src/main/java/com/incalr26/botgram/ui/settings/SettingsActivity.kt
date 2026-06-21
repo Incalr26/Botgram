@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.incalr26.botgram.R
 import com.incalr26.botgram.ui.login.LoginActivity
@@ -12,6 +13,8 @@ import com.incalr26.botgram.ui.login.LoginActivity
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 沉浸式设置，与主页一致
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_settings)
 
         val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)

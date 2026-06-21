@@ -27,11 +27,9 @@ class PollingService : Service() {
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
 
-    // 缓存群成员信息（角色 + 标签，标签可以为空字符串，但不会缓存空字符串）
+    // 缓存群成员信息（角色和标签，标签可为空）
     data class MemberInfo(val role: String, val title: String?)
     private val memberCache = ConcurrentHashMap<String, MemberInfo>()
-    // 去重：正在请求的键集合
-    private val pendingRequests = ConcurrentHashMap.newKeySet<String>()
 
     override fun onCreate() {
         super.onCreate()
@@ -107,51 +105,25 @@ class PollingService : Service() {
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
 
+        // 1. 获取身份/标签（优先缓存，否则标记需要异步获取）
         var senderRole: String? = null
         var senderTitle: String? = null
-
+        var needAsyncFetch = false
         if (chatType != "private" && senderId != null) {
             val cacheKey = "${chatId}_${senderId}"
             val cached = memberCache[cacheKey]
-
-            if (cached != null && cached.title != null) {
-                // 缓存存在且标签非空，直接使用
+            if (cached != null) {
                 senderRole = cached.role
                 senderTitle = cached.title
-            } else if (pendingRequests.add(cacheKey)) {
-                // 发起请求，避免重复
-                try {
-                    val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
-                        .getString("bot_token", "") ?: ""
-                    val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
-                    val memberReq = Request.Builder().url(memberUrl).build()
-                    val memberRes = ApiClient.getClient().newCall(memberReq).execute()
-                    if (memberRes.isSuccessful) {
-                        val memberJson = JSONObject(memberRes.body?.string() ?: "")
-                        if (memberJson.getBoolean("ok")) {
-                            val result = memberJson.getJSONObject("result")
-                            val role = result.optString("status", "member")
-                            val title = result.optString("custom_title", null)?.takeIf { it.isNotEmpty() }
-                            senderRole = role
-                            senderTitle = title
-                            // 缓存结果：标签非空时才存储，空字符串不缓存
-                            if (!title.isNullOrEmpty()) {
-                                memberCache[cacheKey] = MemberInfo(role, title)
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-                finally {
-                    pendingRequests.remove(cacheKey)
-                }
-                if (senderRole.isNullOrEmpty()) senderRole = "member"
             } else {
-                // 正在请求中，使用默认值
+                // 无缓存，先用默认值（普通成员身份为 member）
                 senderRole = "member"
                 senderTitle = null
+                needAsyncFetch = true
             }
         }
 
+        // 2. 入库
         val existingChat = chatRepository.getChatById(chatId)
         val existingAvatarUrl = existingChat?.avatarUrl
 
@@ -167,28 +139,61 @@ class PollingService : Service() {
             unreadCount = 1,
             avatarUrl = existingAvatarUrl
         )
-
         chatRepository.insertOrUpdateChat(chatEntity)
 
         val messageId = msg.getLong("message_id")
-        messageRepository.insertMessage(
-            MessageEntity(
-                messageId = messageId,
-                chatId = chatId,
-                senderUserId = senderId,
-                senderName = senderName,
-                text = messageText,
-                date = msg.getLong("date"),
-                isOutgoing = false,
-                rawJson = msg.toString(),
-                entities = entitiesJson,
-                replyToJson = replyToJson,
-                senderRole = senderRole,
-                senderTitle = senderTitle
-            )
+        val messageEntity = MessageEntity(
+            messageId = messageId,
+            chatId = chatId,
+            senderUserId = senderId,
+            senderName = senderName,
+            text = messageText,
+            date = msg.getLong("date"),
+            isOutgoing = false,
+            rawJson = msg.toString(),
+            entities = entitiesJson,
+            replyToJson = replyToJson,
+            senderRole = senderRole,
+            senderTitle = senderTitle
         )
+        messageRepository.insertMessage(messageEntity)
 
+        // 3. 通知 UI 刷新
         NewMessageNotifier.newMessage.postValue(Unit)
+
+        // 4. 异步获取标签（仅当无缓存时）
+        if (needAsyncFetch && senderId != null) {
+            val cacheKey = "${chatId}_${senderId}"
+            serviceScope.launch {
+                try {
+                    val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+                        .getString("bot_token", "") ?: return@launch
+                    val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
+                    val memberReq = Request.Builder().url(memberUrl).build()
+                    val memberRes = ApiClient.getClient().newCall(memberReq).execute()
+                    if (memberRes.isSuccessful) {
+                        val memberJson = JSONObject(memberRes.body?.string() ?: "")
+                        if (memberJson.getBoolean("ok")) {
+                            val result = memberJson.getJSONObject("result")
+                            val role = result.optString("status", "member")
+                            val title = result.optString("custom_title", null)
+                            val finalTitle = if (title.isNullOrBlank()) null else title.trim()
+
+                            // 缓存结果
+                            memberCache[cacheKey] = MemberInfo(role, finalTitle)
+
+                            // 更新数据库
+                            messageRepository.insertMessage(
+                                messageEntity.copy(senderRole = role, senderTitle = finalTitle)
+                            )
+
+                            // 刷新 UI 显示身份/标签
+                            NewMessageNotifier.newMessage.postValue(Unit)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun extractMessageText(msg: JSONObject): String? {
