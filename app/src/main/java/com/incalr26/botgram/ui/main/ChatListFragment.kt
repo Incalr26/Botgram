@@ -1,14 +1,10 @@
 package com.incalr26.botgram.ui.main
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
@@ -18,6 +14,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.repository.ChatRepository
+import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -25,14 +22,6 @@ class ChatListFragment : Fragment() {
     private lateinit var chatRepository: ChatRepository
     private lateinit var adapter: ChatAdapter
     private lateinit var swipeRefresh: SwipeRefreshLayout
-
-    private val newMsgReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            lifecycleScope.launch(Dispatchers.IO) {
-                chatRepository.refreshChats()
-            }
-        }
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -68,25 +57,18 @@ class ChatListFragment : Fragment() {
             }
         }
 
-        //  使用 ContextCompat.registerReceiver 并指定 RECEIVER_NOT_EXPORTED
-        ContextCompat.registerReceiver(
-            requireContext(),
-            newMsgReceiver,
-            IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        // 观察全局新消息
+        NewMessageNotifier.newMessage.observe(viewLifecycleOwner) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                chatRepository.refreshChats()
+            }
+        }
     }
 
-    //  添加 onResume 强制刷新
     override fun onResume() {
         super.onResume()
         lifecycleScope.launch(Dispatchers.IO) {
             chatRepository.refreshChats()
         }
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        try { requireContext().unregisterReceiver(newMsgReceiver) } catch (_: Exception) {}
     }
 }

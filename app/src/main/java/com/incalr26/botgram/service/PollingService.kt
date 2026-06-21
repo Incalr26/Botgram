@@ -14,6 +14,7 @@ import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import com.incalr26.botgram.data.repository.MessageRepository
 import com.incalr26.botgram.util.NetworkStateHolder
+import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
@@ -26,6 +27,7 @@ class PollingService : Service() {
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
 
+    // 缓存群成员标签，减少 API 调用
     private val customTitleCache = ConcurrentHashMap<String, String?>()
 
     override fun onCreate() {
@@ -102,6 +104,7 @@ class PollingService : Service() {
         val senderId = from?.optLong("id")
         val senderName = from?.optString("first_name") ?: "未知"
 
+        // 获取身份和标签（仅群组）
         var senderRole: String? = null
         var senderTitle: String? = null
         if (chatType != "private" && senderId != null) {
@@ -166,9 +169,8 @@ class PollingService : Service() {
             )
         )
 
-        val refreshIntent = Intent("com.incalr26.botgram.NEW_MESSAGE")
-        refreshIntent.putExtra("chatId", chatId)
-        sendBroadcast(refreshIntent)
+        // 通过 LiveData 通知所有页面刷新
+        NewMessageNotifier.newMessage.postValue(Unit)
     }
 
     private fun extractMessageText(msg: JSONObject): String? {

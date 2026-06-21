@@ -1,11 +1,9 @@
 package com.incalr26.botgram.ui.main
 
-import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -16,9 +14,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -29,6 +25,7 @@ import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import com.incalr26.botgram.data.repository.MessageRepository
+import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
@@ -48,29 +45,20 @@ class ChatActivity : AppCompatActivity() {
         gotoCrash(throwable)
     }
 
-    private val messageReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.getLongExtra("chatId", 0) == chatId) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    delay(100)
-                    loadMessagesInternal()
-                }
-            }
+    // 观察全局新消息通知
+    private val newMessageObserver = Observer<Unit> {
+        lifecycleScope.launch(Dispatchers.IO) {
+            delay(100)
+            loadMessagesInternal()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         try {
             setContentView(R.layout.activity_chat)
 
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
-            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
-                val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-                v.setPadding(v.paddingLeft, statusBars.top, v.paddingRight, v.paddingBottom)
-                insets
-            }
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
@@ -127,24 +115,17 @@ class ChatActivity : AppCompatActivity() {
                 chatRepository.updateUnreadCount(chatId, 0)
             }
 
+            // 观察全局新消息
+            NewMessageNotifier.newMessage.observe(this, newMessageObserver)
+
         } catch (e: Exception) {
             gotoCrash(e)
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        ContextCompat.registerReceiver(
-            this,
-            messageReceiver,
-            IntentFilter("com.incalr26.botgram.NEW_MESSAGE"),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-    }
-
-    override fun onPause() {
-        super.onPause()
-        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
+    override fun onDestroy() {
+        super.onDestroy()
+        NewMessageNotifier.newMessage.removeObserver(newMessageObserver)
     }
 
     private fun setReplyBanner(message: MessageEntity) {
@@ -413,10 +394,5 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try { unregisterReceiver(messageReceiver) } catch (_: Exception) {}
     }
 }
