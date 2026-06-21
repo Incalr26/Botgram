@@ -5,12 +5,12 @@
 [![GitHub Release](https://img.shields.io/github/v/release/Incalr26/Botgram?label=Release)](https://github.com/Incalr26/Botgram/releases)
 [![License](https://img.shields.io/github/license/Incalr26/Botgram?label=License)](LICENSE)
 
-使用 Telegram 机器人聊天的客户端。直接连接 Telegram 服务器，无后端，所有数据本地存储。
+使用 Telegram 机器人聊天的客户端。直接连接 Telegram 服务器，无中转服务器，所有数据本地存储。
 
 
 ## 优势 / Advantages
-- 直接调用 Telegram Bot API，安全快捷
-- 没有telegram账号也可以通过他人申请的bot在telegram聊天
+- 直接调用 Telegram Bot API，无中转服务器，安全快捷
+- 没有telegram账号也可以通过他人申请的bot免费在telegram聊天
 - 使用图形化交互管理bot，简单便捷
 - 页面简洁
 
@@ -27,6 +27,14 @@
 - 侧边抽屉菜单
 - 完整的 API 原始数据日志，可支持复制、导出和发送给开发者
 - 崩溃自动进入崩溃页面
+- 粗体斜体等文本消息特殊格式显示
+- 群成员身份/标签显示（目前不支持显示普通群成员的标签）
+- 消息回复引用显示
+- 消息自动刷新
+
+## 注意 / Note
+- 若要读取群中的消息，请检查是否关闭了隐私模式
+- 若需读取其他bot的消息，需在botfather中打开bot to bot功能
 
 ## 下载 / Download
 - [GitHub Releases](https://github.com/Incalr26/Botgram/releases)
