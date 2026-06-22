@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -41,6 +42,16 @@ class MessageAdapter(
     private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    
+    private val unlockedMediaIds = mutableSetOf<Long>()
+
+    private fun formatSize(size: Long): String {
+        if (size <= 0) return "未知大小"
+        if (size < 1024) return "${size} B"
+        if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024f)
+        if (size < 1024 * 1024 * 1024) return String.format("%.2f MB", size / (1024f * 1024f))
+        return String.format("%.2f GB", size / (1024f * 1024f * 1024f))
+    }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: ImageView = view.findViewById(R.id.avatar)
@@ -56,12 +67,13 @@ class MessageAdapter(
         val replyMeta: TextView = view.findViewById(R.id.replyMeta)
         val replyPreview: TextView = view.findViewById(R.id.replyPreview)
 
-        val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
+        val mediaContainer: MaterialCardView = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
-        val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
+        val mediaOverlay: LinearLayout = view.findViewById(R.id.mediaOverlay)
         val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
+        val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
         
-        val fileContainer: LinearLayout = view.findViewById(R.id.fileContainer)
+        val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
         
@@ -113,7 +125,6 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
-        // 渲染转发标记
         if (rawObj.has("forward_origin")) {
             val origin = rawObj.getJSONObject("forward_origin")
             val fName = origin.optJSONObject("sender_user")?.optString("first_name") ?: origin.optJSONObject("chat")?.optString("title") ?: "未知"
@@ -129,7 +140,6 @@ class MessageAdapter(
             holder.forwardInfo.visibility = View.GONE
         }
 
-        // 渲染回复标记
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)
@@ -145,7 +155,6 @@ class MessageAdapter(
             holder.replyContainer.visibility = View.GONE
         }
 
-        // 媒体解析渲染核心逻辑
         holder.mediaContainer.visibility = View.GONE
         holder.fileContainer.visibility = View.GONE
         holder.mediaJob?.cancel()
@@ -157,36 +166,43 @@ class MessageAdapter(
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
             var fileId = ""
+            var fileSize = 0L
             var isVideo = false
             var autoCache = false
             
             if (rawObj.has("photo")) {
                 val arr = rawObj.getJSONArray("photo")
-                fileId = arr.getJSONObject(arr.length() - 1).getString("file_id")
+                val photoObj = arr.getJSONObject(arr.length() - 1)
+                fileId = photoObj.getString("file_id")
+                fileSize = photoObj.optLong("file_size", 0L)
                 autoCache = prefs.getBoolean("auto_image", false)
             } else if (rawObj.has("sticker")) {
-                fileId = rawObj.getJSONObject("sticker").getString("file_id")
+                val stickerObj = rawObj.getJSONObject("sticker")
+                fileId = stickerObj.getString("file_id")
+                fileSize = stickerObj.optLong("file_size", 0L)
                 autoCache = prefs.getBoolean("auto_sticker", false)
             } else if (rawObj.has("video")) {
                 val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
+                fileSize = vid.optLong("file_size", 0L)
                 isVideo = true
                 autoCache = false 
             }
 
+            holder.mediaOverlaySize.text = formatSize(fileSize)
             holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else android.R.drawable.stat_sys_download)
-            holder.mediaOverlay.visibility = if (autoCache) View.GONE else View.VISIBLE
+            
+            val isUnlocked = unlockedMediaIds.contains(currentMsgId)
+            holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
             val loadMedia = {
                 holder.mediaOverlay.visibility = View.GONE
+                unlockedMediaIds.add(currentMsgId)
                 holder.mediaJob = scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
                     if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
                         if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
-                            // 若是无缩略图视频直接发起隐式播放
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(url), "video/*")
-                            }
+                            val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse(url), "video/*") }
                             try { ctx.startActivity(intent) } catch (_: Exception) { }
                         } else {
                             val req = ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build()
@@ -196,7 +212,7 @@ class MessageAdapter(
                 }
             }
 
-            if (autoCache) loadMedia()
+            if (autoCache || isUnlocked) loadMedia()
             
             holder.mediaOverlay.setOnClickListener { loadMedia() }
             holder.mediaImage.setOnClickListener {
@@ -213,10 +229,8 @@ class MessageAdapter(
         } else if (rawObj.has("document")) {
             holder.fileContainer.visibility = View.VISIBLE
             val doc = rawObj.getJSONObject("document")
-            val fName = doc.optString("file_name", "未知文件")
-            val fSize = doc.optLong("file_size", 0L)
-            holder.fileNameText.text = fName
-            holder.fileSizeText.text = String.format("%.2f MB", fSize / (1024f * 1024f))
+            holder.fileNameText.text = doc.optString("file_name", "未知文件")
+            holder.fileSizeText.text = formatSize(doc.optLong("file_size", 0L))
             
             holder.fileContainer.setOnClickListener {
                 scope.launch {
@@ -229,7 +243,6 @@ class MessageAdapter(
             }
         }
 
-        // 富文本渲染
         val rawText = message.text ?: ""
         if (rawText.isEmpty()) {
             holder.messageText.visibility = View.GONE

@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -53,26 +54,30 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, isChecked -> prefs.edit().putBoolean("auto_sticker", isChecked).apply() }
         }
 
-        // 修改保存路径
+        val subtitle = findViewById<TextView>(R.id.pathConfigSubtitle)
+        subtitle.text = "当前: Download/${prefs.getString("media_save_path", "Botgram")}"
+
         findViewById<View>(R.id.pathConfigLayout).setOnClickListener {
-            val input = EditText(this)
-            input.setText(prefs.getString("media_save_path", "Botgram"))
+            val input = EditText(this).apply {
+                setText(prefs.getString("media_save_path", "Botgram"))
+                setPadding(48, 32, 48, 32)
+            }
             MaterialAlertDialogBuilder(this)
-                .setTitle("媒体保存路径")
-                .setMessage("默认保存至 Download/ 目录下")
+                .setTitle("更改长按保存路径")
+                .setMessage("基础目录为系统 Download 目录")
                 .setView(input)
                 .setPositiveButton("保存") { _, _ ->
                     val newPath = input.text.toString().trim()
                     if (newPath.isNotEmpty()) {
                         prefs.edit().putString("media_save_path", newPath).apply()
-                        Toast.makeText(this, "路径已更新为: Download/$newPath", Toast.LENGTH_SHORT).show()
+                        subtitle.text = "当前: Download/$newPath"
+                        Toast.makeText(this, "路径已更新", Toast.LENGTH_SHORT).show()
                     }
                 }
                 .setNegativeButton("取消", null)
                 .show()
         }
 
-        // 清除媒体缓存
         findViewById<View>(R.id.clearCacheLayout).setOnClickListener {
             CoroutineScope(Dispatchers.IO).launch {
                 Coil.imageLoader(this@SettingsActivity).diskCache?.clear()

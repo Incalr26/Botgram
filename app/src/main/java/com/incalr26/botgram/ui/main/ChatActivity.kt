@@ -156,7 +156,14 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun loadMessagesInternal() {
         val messages = messageRepository.getMessages(chatId)
-        withContext(Dispatchers.Main) { adapter.submitList(messages) { recyclerView.scrollToPosition(adapter.itemCount - 1) } }
+        withContext(Dispatchers.Main) {
+            val list = messages.toList()
+            adapter.submitList(list) {
+                if (list.isNotEmpty()) {
+                    recyclerView.post { recyclerView.scrollToPosition(list.size - 1) }
+                }
+            }
+        }
     }
 
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
@@ -185,7 +192,7 @@ class ChatActivity : AppCompatActivity() {
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document")) {
-            items.add(0, Triple("保存", android.R.drawable.ic_menu_save, 8))
+            items.add(0, Triple("保存", android.R.drawable.stat_sys_download, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -281,7 +288,7 @@ class ChatActivity : AppCompatActivity() {
             if (!url.isNullOrEmpty()) {
                 val success = FileHelper.saveMediaToDownloads(this@ChatActivity, url, subDir, fName)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, if (success) "已保存到 Download/Botgram/ 目录" else "保存失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ChatActivity, if (success) "已保存到 Download 目录" else "保存失败", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -341,7 +348,9 @@ class ChatActivity : AppCompatActivity() {
             val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); replyTo?.let { put("reply_to_message_id", it) } }
             val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
             val res = ApiClient.getClient().newCall(req).execute()
-            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) loadMessagesInternal()
+            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) {
+                loadMessagesInternal()
+            }
         }
     }
 
