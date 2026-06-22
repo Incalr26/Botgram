@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -53,11 +54,9 @@ class ChatActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_chat)
 
-            // 状态栏占位高度
             val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
             statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
-            // 键盘监听：仅给底部输入栏增加内边距
             val rootView = findViewById<View>(android.R.id.content)
             ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
                 val imeBars = insets.getInsets(WindowInsetsCompat.Type.ime())
@@ -89,7 +88,16 @@ class ChatActivity : AppCompatActivity() {
 
             adapter = MessageAdapter(
                 onLongClick = { message, view ->
-                    showMessageMenu(message, view)
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    if (imm.isActive && currentFocus != null) {
+                        imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
+                    }
+                    
+                    view.postDelayed({
+                        if (!isFinishing && !isDestroyed) {
+                            showMessageMenu(message, view)
+                        }
+                    }, 150)
                     true
                 }
             )
@@ -103,7 +111,6 @@ class ChatActivity : AppCompatActivity() {
             val messageInput = findViewById<EditText>(R.id.messageInput)
             val sendButton = findViewById<ImageButton>(R.id.sendButton)
             val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
-            val replyText = findViewById<TextView>(R.id.replyText)
             val cancelReplyBtn = findViewById<ImageButton>(R.id.cancelReply)
 
             cancelReplyBtn.setOnClickListener {
@@ -296,14 +303,26 @@ class ChatActivity : AppCompatActivity() {
                 imm.showSoftInput(input, 0)
             }
             5 -> {
-                val link = if (chatId < 0) {
-                    "https://t.me/c/${chatId.toString().removePrefix("-100")}/${message.messageId}"
-                } else {
-                    "https://t.me/c/${chatId}/${message.messageId}"
+                lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+                    val currentChat = chatRepository.getChatById(chatId)
+                    val username = currentChat?.username?.trim()
+                    
+                    val link = if (!username.isNullOrEmpty()) {
+                        "https://t.me/$username/${message.messageId}"
+                    } else {
+                        if (chatId < 0) {
+                            "https://t.me/c/${chatId.toString().removePrefix("-100")}/${message.messageId}"
+                        } else {
+                            "https://t.me/c/${chatId}/${message.messageId}"
+                        }
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("link", link))
+                        Toast.makeText(this@ChatActivity, "链接已复制", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("link", link))
-                Toast.makeText(this, "链接已复制", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -386,7 +405,10 @@ class ChatActivity : AppCompatActivity() {
                     date = result.getLong("date"),
                     isOutgoing = true,
                     rawJson = result.toString(),
-                    replyToJson = replyToJson
+                    entities = null,
+                    replyToJson = replyToJson,
+                    senderRole = null,
+                    senderTitle = null
                 )
                 messageRepository.insertMessage(messageEntity)
                 chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)
