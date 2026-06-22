@@ -7,7 +7,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -28,6 +27,7 @@ import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import com.incalr26.botgram.data.repository.MessageRepository
+import com.incalr26.botgram.util.FileHelper
 import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -44,9 +44,7 @@ class ChatActivity : AppCompatActivity() {
     private var replyToMessageId: Long? = null
     private var chatType: String = "private"
 
-    private val crashHandler = CoroutineExceptionHandler { _, throwable ->
-        gotoCrash(throwable)
-    }
+    private val crashHandler = CoroutineExceptionHandler { _, throwable -> gotoCrash(throwable) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,18 +52,15 @@ class ChatActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_chat)
 
-            val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
-            statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
+            findViewById<View>(R.id.statusBarPlaceholder).layoutParams.height = getStatusBarHeight()
 
             val rootView = findViewById<View>(android.R.id.content)
             ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
                 val imeBars = insets.getInsets(WindowInsetsCompat.Type.ime())
                 val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-
-                val bottomBar: LinearLayout = findViewById(R.id.bottomBar)
+                val bottomBar = findViewById<LinearLayout>(R.id.bottomBar)
                 val bottomPadding = if (imeBars.bottom > 0) imeBars.bottom else navBars.bottom
                 bottomBar.setPadding(bottomBar.paddingLeft, bottomBar.paddingTop, bottomBar.paddingRight, bottomPadding)
-
                 insets
             }
 
@@ -73,47 +68,32 @@ class ChatActivity : AppCompatActivity() {
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.title = "聊天"
-            supportActionBar?.subtitle = null
 
             chatId = intent.getLongExtra("chatId", 0)
-            if (chatId == 0L) {
-                finish()
-                return
-            }
+            if (chatId == 0L) { finish(); return }
 
-            val app = BotApp.instance ?: throw IllegalStateException("应用未初始化")
-
+            val app = BotApp.instance
             chatRepository = ChatRepository(app.databaseHelper)
             messageRepository = MessageRepository(app.databaseHelper)
 
             adapter = MessageAdapter(
                 onLongClick = { message, view ->
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                    if (imm.isActive && currentFocus != null) {
-                        imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
-                    }
-                    
-                    view.postDelayed({
-                        if (!isFinishing && !isDestroyed) {
-                            showMessageMenu(message, view)
-                        }
-                    }, 150)
+                    if (imm.isActive && currentFocus != null) imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
+                    view.postDelayed({ if (!isFinishing && !isDestroyed) showMessageMenu(message, view) }, 150)
                     true
                 }
             )
 
             recyclerView = findViewById(R.id.messagesRecyclerView)
             recyclerView.adapter = adapter
-            recyclerView.layoutManager = LinearLayoutManager(this).apply {
-                stackFromEnd = true
-            }
+            recyclerView.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
 
             val messageInput = findViewById<EditText>(R.id.messageInput)
             val sendButton = findViewById<ImageButton>(R.id.sendButton)
             val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
-            val cancelReplyBtn = findViewById<ImageButton>(R.id.cancelReply)
 
-            cancelReplyBtn.setOnClickListener {
+            findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
                 replyToMessageId = null
                 replyBanner.visibility = View.GONE
             }
@@ -135,23 +115,15 @@ class ChatActivity : AppCompatActivity() {
             }
 
             NewMessageNotifier.newMessage.observe(this) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    delay(100)
-                    loadMessagesInternal()
-                }
+                lifecycleScope.launch(Dispatchers.IO) { delay(100); loadMessagesInternal() }
             }
 
-        } catch (e: Exception) {
-            gotoCrash(e)
-        }
+        } catch (e: Exception) { gotoCrash(e) }
     }
 
     private fun setReplyBanner(message: MessageEntity) {
         val banner = findViewById<LinearLayout>(R.id.replyBanner)
-        val textView = findViewById<TextView>(R.id.replyText)
-        val name = message.senderName ?: "未知"
-        val preview = message.text?.take(50) ?: ""
-        textView.text = "回复 $name: $preview"
+        findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"
         banner.visibility = View.VISIBLE
     }
 
@@ -165,53 +137,26 @@ class ChatActivity : AppCompatActivity() {
         var memberCount: Int? = null
         try {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
-            val url = "https://api.telegram.org/bot$token/getChat?chat_id=$chatId"
-            val request = Request.Builder().url(url).build()
-            val response = ApiClient.getClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = JSONObject(response.body?.string() ?: "")
-                if (json.getBoolean("ok")) {
-                    val chatObj = json.getJSONObject("result")
-                    memberCount = if (chatObj.has("member_count")) chatObj.getInt("member_count") else null
-                }
+            val res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/getChat?chat_id=$chatId").build()).execute()
+            if (res.isSuccessful) {
+                val json = JSONObject(res.body?.string() ?: "")
+                if (json.getBoolean("ok")) memberCount = json.getJSONObject("result").optInt("member_count")
             }
         } catch (_: Exception) {}
 
         withContext(Dispatchers.Main) {
             if (chat != null) {
                 chatType = chat.type
-                val name = if (chat.type == "private") {
-                    chat.firstName ?: chat.username ?: "私聊"
-                } else {
-                    chat.title ?: "群组"
-                }
-                supportActionBar?.title = name
-                val typeStr = when (chat.type) {
-                    "private" -> "私聊"
-                    "group" -> "群组"
-                    "supergroup" -> "超级群组"
-                    "channel" -> "频道"
-                    else -> chat.type
-                }
-                val memberStr = if (memberCount != null) " · ${memberCount}人" else ""
-                supportActionBar?.subtitle = typeStr + memberStr
+                supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
+                val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
+                supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) " · ${memberCount}人" else "")
             }
         }
     }
 
     private suspend fun loadMessagesInternal() {
         val messages = messageRepository.getMessages(chatId)
-        withContext(Dispatchers.Main) {
-            adapter.submitList(messages) {
-                recyclerView.scrollToPosition(adapter.itemCount - 1)
-            }
-        }
-    }
-
-    private fun loadMessages() {
-        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-            loadMessagesInternal()
-        }
+        withContext(Dispatchers.Main) { adapter.submitList(messages) { recyclerView.scrollToPosition(adapter.itemCount - 1) } }
     }
 
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
@@ -235,11 +180,12 @@ class ChatActivity : AppCompatActivity() {
             Triple("转发给...", R.drawable.ic_send, 7),
             Triple("回复", R.drawable.ic_reply, 4)
         )
-        if (chatType != "private") {
-            items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
-        }
-        if (message.isOutgoing) {
-            items.add(Triple("撤回", R.drawable.ic_revoke, 3))
+        if (chatType != "private") items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
+        if (message.isOutgoing) items.add(Triple("撤回", R.drawable.ic_revoke, 3))
+
+        val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
+        if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document")) {
+            items.add(0, Triple("保存", android.R.drawable.ic_menu_save, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -250,40 +196,22 @@ class ChatActivity : AppCompatActivity() {
 
         items.forEach { (title, iconRes, action) ->
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            val icon = itemView.findViewById<ImageView>(R.id.menu_icon)
-            val text = itemView.findViewById<TextView>(R.id.menu_text)
-            icon.setImageResource(iconRes)
-            icon.setColorFilter(primaryColor)
-            text.text = title
-            text.setTextColor(textColor)
-            itemView.setOnClickListener {
-                handleMenuAction(action, message)
-                popupWindow.dismiss()
-            }
+            itemView.findViewById<ImageView>(R.id.menu_icon).apply { setImageResource(iconRes); setColorFilter(primaryColor) }
+            itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(textColor) }
+            itemView.setOnClickListener { handleMenuAction(action, message); popupWindow.dismiss() }
             container.addView(itemView)
         }
 
         container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupHeight = container.measuredHeight
-
         val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
         val bubbleLocation = IntArray(2)
         bubble.getLocationOnScreen(bubbleLocation)
-        val bubbleTop = bubbleLocation[1]
-        val bubbleLeft = bubbleLocation[0]
-        val bubbleHeight = bubble.height
-
-        val anchorLocation = IntArray(2)
-        anchor.getLocationOnScreen(anchorLocation)
-        val xOff = bubbleLeft - anchorLocation[0]
-
-        val screenHeight = resources.displayMetrics.heightPixels
+        val xOff = bubbleLocation[0] - IntArray(2).apply { anchor.getLocationOnScreen(this) }[0]
         var yOff = 0
-        val anchorBottom = anchorLocation[1] + anchor.height
-        if (bubbleLocation[1] + bubbleHeight + popupHeight > screenHeight) {
-            yOff = bubbleTop - popupHeight - anchorBottom
+        if (bubbleLocation[1] + bubble.height + popupHeight > resources.displayMetrics.heightPixels) {
+            yOff = bubbleLocation[1] - popupHeight - (IntArray(2).apply { anchor.getLocationOnScreen(this) }[1] + anchor.height)
         }
-
         popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
     }
 
@@ -301,61 +229,74 @@ class ChatActivity : AppCompatActivity() {
                 setReplyBanner(message)
                 val input = findViewById<EditText>(R.id.messageInput)
                 input.requestFocus()
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showSoftInput(input, 0)
+                (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, 0)
             }
             5 -> {
                 lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-                    val currentChat = chatRepository.getChatById(chatId)
-                    val username = currentChat?.username?.trim()
-                    
-                    val link = if (!username.isNullOrEmpty()) {
-                        "https://t.me/$username/${message.messageId}"
-                    } else {
-                        if (chatId < 0) {
-                            "https://t.me/c/${chatId.toString().removePrefix("-100")}/${message.messageId}"
-                        } else {
-                            "https://t.me/c/${chatId}/${message.messageId}"
-                        }
-                    }
-                    
+                    val username = chatRepository.getChatById(chatId)?.username?.trim()
+                    val link = if (!username.isNullOrEmpty()) "https://t.me/$username/${message.messageId}" else "https://t.me/c/${if (chatId < 0) chatId.toString().removePrefix("-100") else chatId}/${message.messageId}"
                     withContext(Dispatchers.Main) {
-                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("link", link))
+                        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("link", link))
                         Toast.makeText(this@ChatActivity, "链接已复制", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
             6 -> handleRepeatAction(message, true)
             7 -> showForwardDialog(message)
+            8 -> saveMedia(message)
+        }
+    }
+
+    private fun saveMedia(message: MessageEntity) {
+        Toast.makeText(this, "开始下载...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+            val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
+            var fileId = ""
+            var subDir = ""
+            var fName = "${message.messageId}"
+            
+            if (rawObj.has("photo")) {
+                val arr = rawObj.getJSONArray("photo")
+                fileId = arr.getJSONObject(arr.length() - 1).getString("file_id")
+                subDir = "Images"
+                fName += ".jpg"
+            } else if (rawObj.has("sticker")) {
+                fileId = rawObj.getJSONObject("sticker").getString("file_id")
+                subDir = "Stickers"
+                fName += ".webp"
+            } else if (rawObj.has("video")) {
+                val vid = rawObj.getJSONObject("video")
+                fileId = vid.getString("file_id")
+                subDir = "Videos"
+                fName = vid.optString("file_name", "$fName.mp4")
+            } else if (rawObj.has("document")) {
+                val doc = rawObj.getJSONObject("document")
+                fileId = doc.getString("file_id")
+                subDir = "Files"
+                fName = doc.optString("file_name", fName)
+            }
+
+            val url = FileHelper.getTelegramFileUrl(fileId, token)
+            if (!url.isNullOrEmpty()) {
+                val success = FileHelper.saveMediaToDownloads(this@ChatActivity, url, subDir, fName)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, if (success) "已保存到 Download/Botgram/ 目录" else "保存失败", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun handleRepeatAction(message: MessageEntity, isForward: Boolean) {
         val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-        val needConfirm = prefs.getBoolean("repeat_confirm", true)
-        val title = if (isForward) "转发式复读确认" else "复读确认"
-        val desc = if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？"
-
-        if (needConfirm) {
+        if (prefs.getBoolean("repeat_confirm", true)) {
             MaterialAlertDialogBuilder(this)
-                .setTitle(title)
-                .setMessage(desc)
-                .setPositiveButton("确定") { _, _ ->
-                    if (isForward) {
-                        forwardMessage(message, chatId)
-                    } else {
-                        sendTextMessage(message.text ?: "", null)
-                    }
-                }
-                .setNegativeButton("取消", null)
-                .show()
+                .setTitle(if (isForward) "转发式复读确认" else "复读确认")
+                .setMessage(if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？")
+                .setPositiveButton("确定") { _, _ -> if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null) }
+                .setNegativeButton("取消", null).show()
         } else {
-            if (isForward) {
-                forwardMessage(message, chatId)
-            } else {
-                sendTextMessage(message.text ?: "", null)
-            }
+            if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null)
         }
     }
 
@@ -363,22 +304,12 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val chats = chatRepository.getAllChatsList()
             withContext(Dispatchers.Main) {
-                if (chats.isEmpty()) {
-                    Toast.makeText(this@ChatActivity, "没有可转发的会话", Toast.LENGTH_SHORT).show()
-                    return@withContext
-                }
-                val chatNames = chats.map { 
-                    if (it.type == "private") it.firstName ?: it.username ?: "私聊"
-                    else it.title ?: "群组"
-                }.toTypedArray()
-                
+                if (chats.isEmpty()) return@withContext
                 MaterialAlertDialogBuilder(this@ChatActivity)
                     .setTitle("转发给...")
-                    .setItems(chatNames) { _, which ->
-                        val targetChatId = chats[which].chatId
-                        forwardMessage(message, targetChatId)
-                    }
-                    .show()
+                    .setItems(chats.map { if (it.type == "private") it.firstName ?: "私聊" else it.title ?: "群组" }.toTypedArray()) { _, which ->
+                        forwardMessage(message, chats[which].chatId)
+                    }.show()
             }
         }
     }
@@ -386,49 +317,12 @@ class ChatActivity : AppCompatActivity() {
     private fun forwardMessage(message: MessageEntity, targetChatId: Long) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val url = "https://api.telegram.org/bot$token/forwardMessage"
-            val jsonBody = JSONObject().apply {
-                put("chat_id", targetChatId)
-                put("from_chat_id", message.chatId)
-                put("message_id", message.messageId)
-            }
-            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
-            val request = Request.Builder().url(url).post(requestBody).build()
-            val response = ApiClient.getClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                val msg = JSONObject(response.body?.string() ?: "")
-                if (msg.getBoolean("ok")) {
-                    val result = msg.getJSONObject("result")
-                    
-                    val messageEntity = MessageEntity(
-                        messageId = result.getLong("message_id"),
-                        chatId = targetChatId,
-                        senderUserId = null,
-                        senderName = "我",
-                        text = result.optString("text", "[媒体/转发消息]"),
-                        date = result.getLong("date"),
-                        isOutgoing = true,
-                        rawJson = result.toString(),
-                        entities = null,
-                        replyToJson = null,
-                        senderRole = null,
-                        senderTitle = null
-                    )
-                    messageRepository.insertMessage(messageEntity)
-                    chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000)
-                    
-                    if (targetChatId == chatId) {
-                        loadMessagesInternal()
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-            } else {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "转发失败", Toast.LENGTH_SHORT).show()
-                }
+            val jsonBody = JSONObject().apply { put("chat_id", targetChatId); put("from_chat_id", message.chatId); put("message_id", message.messageId) }
+            val req = Request.Builder().url("https://api.telegram.org/bot$token/forwardMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+            val res = ApiClient.getClient().newCall(req).execute()
+            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) {
+                if (targetChatId == chatId) loadMessagesInternal()
+                else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -436,92 +330,28 @@ class ChatActivity : AppCompatActivity() {
     private suspend fun deleteMessage(messageId: Long) {
         try {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return
-            val url = "https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId"
-            val request = Request.Builder().url(url).build()
-            val response = ApiClient.getClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "消息已撤回", Toast.LENGTH_SHORT).show()
-                    loadMessages()
-                }
-            } else {
-                val body = response.body?.string() ?: ""
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "撤回失败: $body", Toast.LENGTH_LONG).show()
-                }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@ChatActivity, "撤回失败: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+            val res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId").build()).execute()
+            withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, if (res.isSuccessful) "已撤回" else "撤回失败", Toast.LENGTH_SHORT).show(); loadMessagesInternal() }
+        } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回失败", Toast.LENGTH_SHORT).show() } }
     }
 
     private fun sendTextMessage(text: String, replyTo: Long?) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val url = "https://api.telegram.org/bot$token/sendMessage"
-            val jsonBody = JSONObject().apply {
-                put("chat_id", chatId)
-                put("text", text)
-                replyTo?.let { put("reply_to_message_id", it) }
-            }
-            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
-            val request = Request.Builder().url(url).post(requestBody).build()
-            val response = ApiClient.getClient().newCall(request).execute()
-            if (!response.isSuccessful) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, "发送失败", Toast.LENGTH_SHORT).show()
-                }
-                return@launch
-            }
-            val msg = JSONObject(response.body?.string() ?: "")
-            if (msg.getBoolean("ok")) {
-                val result = msg.getJSONObject("result")
-                var replyToJson: String? = null
-                if (replyTo != null) {
-                    try {
-                        val repliedMessages = messageRepository.getMessages(chatId)
-                        val repliedMsg = repliedMessages.find { it.messageId == replyTo }
-                        replyToJson = repliedMsg?.rawJson
-                    } catch (_: Exception) {}
-                }
-
-                val messageEntity = MessageEntity(
-                    messageId = result.getLong("message_id"),
-                    chatId = chatId,
-                    senderUserId = null,
-                    senderName = "我",
-                    text = text,
-                    date = result.getLong("date"),
-                    isOutgoing = true,
-                    rawJson = result.toString(),
-                    entities = null,
-                    replyToJson = replyToJson,
-                    senderRole = null,
-                    senderTitle = null
-                )
-                messageRepository.insertMessage(messageEntity)
-                chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)
-                loadMessagesInternal()
-            }
+            val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); replyTo?.let { put("reply_to_message_id", it) } }
+            val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+            val res = ApiClient.getClient().newCall(req).execute()
+            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) loadMessagesInternal()
         }
     }
 
     private fun gotoCrash(throwable: Throwable) {
-        val intent = Intent(this, CrashActivity::class.java).apply {
-            putExtra("stack_trace", android.util.Log.getStackTraceString(throwable))
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        }
-        startActivity(intent)
+        startActivity(Intent(this, CrashActivity::class.java).apply { putExtra("stack_trace", android.util.Log.getStackTraceString(throwable)); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) })
         finish()
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            finish()
-            return true
-        }
+        if (item.itemId == android.R.id.home) { finish(); return true }
         return super.onOptionsItemSelected(item)
     }
 }

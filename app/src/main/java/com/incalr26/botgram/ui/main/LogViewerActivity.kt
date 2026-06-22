@@ -5,14 +5,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.MenuItem
 import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.Spinner
+import android.widget.AutoCompleteTextView
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.AdapterView
-import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import com.google.android.material.button.MaterialButton
 import com.incalr26.botgram.R
 import com.incalr26.botgram.util.LogManager
 import java.io.File
@@ -25,33 +23,28 @@ class LogViewerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_log_viewer)
 
-        val logContent = findViewById<TextView>(R.id.logContent)
-        val clearButton = findViewById<Button>(R.id.clearLogButton)
-        val refreshButton = findViewById<Button>(R.id.refreshLogButton)
-        val exportButton = findViewById<Button>(R.id.exportLogButton)
-        val sendEmailButton = findViewById<Button>(R.id.sendEmailButton)
-
-        // 动态将顶部替换为可切换 Spinner，不破坏原 XML
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = ""
-        
-        val spinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@LogViewerActivity, android.R.layout.simple_spinner_dropdown_item, arrayOf("通讯日志 (API)", "运行日志 (Logcat)"))
-        }
-        toolbar.addView(spinner)
 
+        val logContent = findViewById<TextView>(R.id.logContent)
+        val dropdown = findViewById<AutoCompleteTextView>(R.id.logTypeDropdown)
+        val clearButton = findViewById<MaterialButton>(R.id.clearLogButton)
+        val refreshButton = findViewById<MaterialButton>(R.id.refreshLogButton)
+        val exportButton = findViewById<MaterialButton>(R.id.exportLogButton)
+        val sendEmailButton = findViewById<MaterialButton>(R.id.sendEmailButton)
+
+        val logTypes = arrayOf("通讯日志 (API)", "运行日志 (Logcat)")
+        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, logTypes)
+        dropdown.setAdapter(adapter)
+        
         fun refresh() {
             logContent.text = if (isSystemLog) LogManager.getSystemLogContent() else LogManager.getApiLogContent(this)
         }
 
-        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                isSystemLog = (position == 1)
-                refresh()
-            }
-            override fun onNothingSelected(parent: AdapterView<*>) {}
+        dropdown.setOnItemClickListener { _, _, position, _ ->
+            isSystemLog = (position == 1)
+            refresh()
         }
 
         clearButton.setOnClickListener {
@@ -63,12 +56,12 @@ class LogViewerActivity : AppCompatActivity() {
         exportButton.setOnClickListener {
             try {
                 val logText = logContent.text.toString()
-                if (logText.contains("暂无")) {
+                if (logText.isEmpty() || logText.contains("暂无")) {
                     Toast.makeText(this, "暂无日志可导出", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 val exportDir = File(android.os.Environment.getExternalStoragePublicDirectory(
-                    android.os.Environment.DIRECTORY_DOWNLOADS), "Botgram/logs")
+                    android.os.Environment.DIRECTORY_DOWNLOADS), "Botgram/Logs")
                 if (!exportDir.exists()) exportDir.mkdirs()
                 val prefix = if (isSystemLog) "system_" else "api_"
                 val exportFile = File(exportDir, "botgram_${prefix}export_${System.currentTimeMillis()}.log")
@@ -82,8 +75,8 @@ class LogViewerActivity : AppCompatActivity() {
         sendEmailButton.setOnClickListener {
             try {
                 val logText = logContent.text.toString()
-                if (logText.contains("暂无")) {
-                    Toast.makeText(this, "暂无日志可发送", Toast.LENGTH_SHORT).show()
+                if (logText.isEmpty() || logText.contains("暂无")) {
+                    Toast.makeText(this, "暂无内容可发送", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 val logDir = File(getExternalFilesDir(null), "Botgram/Logs")
@@ -106,16 +99,15 @@ class LogViewerActivity : AppCompatActivity() {
                     Toast.makeText(this, "未找到邮件客户端", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this, "发送失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "发送准备失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+        
+        refresh()
     }
-    
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == android.R.id.home) {
-            finish()
-            return true
-        }
+        if (item.itemId == android.R.id.home) { finish(); return true }
         return super.onOptionsItemSelected(item)
     }
 }
