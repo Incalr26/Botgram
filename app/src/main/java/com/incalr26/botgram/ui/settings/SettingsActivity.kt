@@ -5,14 +5,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
-import android.widget.EditText
-import android.widget.TextView
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import coil.Coil
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.incalr26.botgram.R
 import com.incalr26.botgram.ui.login.LoginActivity
 import kotlinx.coroutines.CoroutineScope
@@ -54,35 +54,30 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, isChecked -> prefs.edit().putBoolean("auto_sticker", isChecked).apply() }
         }
 
-        val subtitle = findViewById<TextView>(R.id.pathConfigSubtitle)
-        subtitle.text = "当前: Download/${prefs.getString("media_save_path", "Botgram")}"
+        val pathInput = findViewById<TextInputEditText>(R.id.pathEditText)
+        val pathLayout = findViewById<TextInputLayout>(R.id.pathInputLayout)
 
-        findViewById<View>(R.id.pathConfigLayout).setOnClickListener {
-            val input = EditText(this).apply {
-                setText(prefs.getString("media_save_path", "Botgram"))
-                setPadding(48, 32, 48, 32)
+        pathInput.setText(prefs.getString("media_save_path", "Botgram"))
+        
+        pathLayout.setEndIconOnClickListener {
+            val newPath = pathInput.text.toString().trim()
+            if (newPath.isNotEmpty()) {
+                prefs.edit().putString("media_save_path", newPath).apply()
+                Toast.makeText(this, "下载路径已保存", Toast.LENGTH_SHORT).show()
+                pathInput.clearFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.hideSoftInputFromWindow(pathInput.windowToken, 0)
+            } else {
+                Toast.makeText(this, "路径不能为空", Toast.LENGTH_SHORT).show()
             }
-            MaterialAlertDialogBuilder(this)
-                .setTitle("更改长按保存路径")
-                .setMessage("基础目录为系统 Download 目录")
-                .setView(input)
-                .setPositiveButton("保存") { _, _ ->
-                    val newPath = input.text.toString().trim()
-                    if (newPath.isNotEmpty()) {
-                        prefs.edit().putString("media_save_path", newPath).apply()
-                        subtitle.text = "当前: Download/$newPath"
-                        Toast.makeText(this, "路径已更新", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .setNegativeButton("取消", null)
-                .show()
         }
 
         findViewById<View>(R.id.clearCacheLayout).setOnClickListener {
+            prefs.edit().remove("unlocked_media").apply()
             CoroutineScope(Dispatchers.IO).launch {
                 Coil.imageLoader(this@SettingsActivity).diskCache?.clear()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "媒体缓存已清空", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, "媒体缓存与记录已清空", Toast.LENGTH_SHORT).show()
                 }
             }
         }

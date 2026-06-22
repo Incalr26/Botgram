@@ -12,7 +12,6 @@ import android.text.style.URLSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -42,8 +41,6 @@ class MessageAdapter(
     private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
-    private val unlockedMediaIds = mutableSetOf<Long>()
 
     private fun formatSize(size: Long): String {
         if (size <= 0) return "未知大小"
@@ -162,6 +159,7 @@ class MessageAdapter(
         
         val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
         val token = prefs.getString("bot_token", "") ?: ""
+        val unlockedSet = prefs.getStringSet("unlocked_media", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
@@ -192,12 +190,14 @@ class MessageAdapter(
             holder.mediaOverlaySize.text = formatSize(fileSize)
             holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else android.R.drawable.stat_sys_download)
             
-            val isUnlocked = unlockedMediaIds.contains(currentMsgId)
+            val isUnlocked = unlockedSet.contains(currentMsgId.toString())
             holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
             val loadMedia = {
                 holder.mediaOverlay.visibility = View.GONE
-                unlockedMediaIds.add(currentMsgId)
+                unlockedSet.add(currentMsgId.toString())
+                prefs.edit().putStringSet("unlocked_media", unlockedSet).apply()
+                
                 holder.mediaJob = scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
                     if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {

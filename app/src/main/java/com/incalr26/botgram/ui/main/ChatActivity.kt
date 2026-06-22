@@ -192,7 +192,7 @@ class ChatActivity : AppCompatActivity() {
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document")) {
-            items.add(0, Triple("保存", android.R.drawable.stat_sys_download, 8))
+            items.add(0, Triple("保存", R.drawable.ic_save_media, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -327,9 +327,30 @@ class ChatActivity : AppCompatActivity() {
             val jsonBody = JSONObject().apply { put("chat_id", targetChatId); put("from_chat_id", message.chatId); put("message_id", message.messageId) }
             val req = Request.Builder().url("https://api.telegram.org/bot$token/forwardMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
             val res = ApiClient.getClient().newCall(req).execute()
-            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) {
-                if (targetChatId == chatId) loadMessagesInternal()
-                else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show() }
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result")
+                    val messageEntity = MessageEntity(
+                        messageId = result.getLong("message_id"),
+                        chatId = targetChatId,
+                        senderUserId = null,
+                        senderName = "我",
+                        text = result.optString("text", "[媒体/转发消息]"),
+                        date = result.getLong("date"),
+                        isOutgoing = true,
+                        rawJson = result.toString(),
+                        entities = null,
+                        replyToJson = null,
+                        senderRole = null,
+                        senderTitle = null
+                    )
+                    messageRepository.insertMessage(messageEntity)
+                    chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000)
+                    
+                    if (targetChatId == chatId) loadMessagesInternal()
+                    else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show() }
+                }
             }
         }
     }
@@ -348,8 +369,35 @@ class ChatActivity : AppCompatActivity() {
             val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); replyTo?.let { put("reply_to_message_id", it) } }
             val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
             val res = ApiClient.getClient().newCall(req).execute()
-            if (res.isSuccessful && JSONObject(res.body?.string() ?: "").getBoolean("ok")) {
-                loadMessagesInternal()
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result")
+                    var replyToJson: String? = null
+                    if (replyTo != null) {
+                        try {
+                            val repliedMsg = messageRepository.getMessages(chatId).find { it.messageId == replyTo }
+                            replyToJson = repliedMsg?.rawJson
+                        } catch (_: Exception) {}
+                    }
+                    val messageEntity = MessageEntity(
+                        messageId = result.getLong("message_id"),
+                        chatId = chatId,
+                        senderUserId = null,
+                        senderName = "我",
+                        text = text,
+                        date = result.getLong("date"),
+                        isOutgoing = true,
+                        rawJson = result.toString(),
+                        entities = null,
+                        replyToJson = replyToJson,
+                        senderRole = null,
+                        senderTitle = null
+                    )
+                    messageRepository.insertMessage(messageEntity)
+                    chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)
+                    loadMessagesInternal()
+                }
             }
         }
     }
