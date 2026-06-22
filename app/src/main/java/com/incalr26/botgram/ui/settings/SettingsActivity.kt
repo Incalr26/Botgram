@@ -13,7 +13,6 @@ import com.incalr26.botgram.ui.login.LoginActivity
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 沉浸式设置，与主页一致
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_settings)
 
@@ -21,7 +20,6 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        // 状态栏占位高度
         val statusBarPlaceholder = findViewById<View>(R.id.statusBarPlaceholder)
         statusBarPlaceholder.layoutParams.height = getStatusBarHeight()
 
@@ -37,6 +35,18 @@ class SettingsActivity : AppCompatActivity() {
         switchRepeat.isChecked = prefs.getBoolean("repeat_confirm", true)
         switchRepeat.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("repeat_confirm", isChecked).apply()
+        }
+        
+        val switchAutoImage = findViewById<MaterialSwitch>(R.id.switchAutoImage)
+        switchAutoImage.isChecked = prefs.getBoolean("auto_image", false)
+        switchAutoImage.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_image", isChecked).apply()
+        }
+        
+        val switchAutoSticker = findViewById<MaterialSwitch>(R.id.switchAutoSticker)
+        switchAutoSticker.isChecked = prefs.getBoolean("auto_sticker", false)
+        switchAutoSticker.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_sticker", isChecked).apply()
         }
     }
 

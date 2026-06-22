@@ -230,9 +230,9 @@ class ChatActivity : AppCompatActivity() {
 
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
-            Triple("直接复读", R.drawable.ic_plus_one_outline, 2),
-            Triple("复读", R.drawable.ic_repeat, 6),
-            Triple("转发", R.drawable.ic_send, 7),
+            Triple("复读", R.drawable.ic_plus_one_outline, 2),
+            Triple("转发式复读", R.drawable.ic_repeat, 6),
+            Triple("转发给...", R.drawable.ic_send, 7),
             Triple("回复", R.drawable.ic_reply, 4)
         )
         if (chatType != "private") {
@@ -294,7 +294,7 @@ class ChatActivity : AppCompatActivity() {
                 clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text ?: ""))
                 Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
             }
-            2 -> handleRepeat(message.text ?: "")
+            2 -> handleRepeatAction(message, false)
             3 -> lifecycleScope.launch(Dispatchers.IO + crashHandler) { deleteMessage(message.messageId) }
             4 -> {
                 replyToMessageId = message.messageId
@@ -326,11 +326,35 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
             }
-            6 -> {
+            6 -> handleRepeatAction(message, true)
+            7 -> showForwardDialog(message)
+        }
+    }
+
+    private fun handleRepeatAction(message: MessageEntity, isForward: Boolean) {
+        val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
+        val needConfirm = prefs.getBoolean("repeat_confirm", true)
+        val title = if (isForward) "转发式复读确认" else "复读确认"
+        val desc = if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？"
+
+        if (needConfirm) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setMessage(desc)
+                .setPositiveButton("确定") { _, _ ->
+                    if (isForward) {
+                        forwardMessage(message, chatId)
+                    } else {
+                        sendTextMessage(message.text ?: "", null)
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            if (isForward) {
                 forwardMessage(message, chatId)
-            }
-            7 -> {
-                showForwardDialog(message)
+            } else {
+                sendTextMessage(message.text ?: "", null)
             }
         }
     }
@@ -381,7 +405,7 @@ class ChatActivity : AppCompatActivity() {
                         chatId = targetChatId,
                         senderUserId = null,
                         senderName = "我",
-                        text = result.optString("text", "[转发消息]"),
+                        text = result.optString("text", "[媒体/转发消息]"),
                         date = result.getLong("date"),
                         isOutgoing = true,
                         rawJson = result.toString(),
@@ -406,21 +430,6 @@ class ChatActivity : AppCompatActivity() {
                     Toast.makeText(this@ChatActivity, "转发失败", Toast.LENGTH_SHORT).show()
                 }
             }
-        }
-    }
-
-    private fun handleRepeat(text: String) {
-        val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-        val needConfirm = prefs.getBoolean("repeat_confirm", true)
-        if (needConfirm) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("复读确认")
-                .setMessage("确定要复读这条消息吗？")
-                .setPositiveButton("确定") { _, _ -> sendTextMessage(text, null) }
-                .setNegativeButton("取消", null)
-                .show()
-        } else {
-            sendTextMessage(text, null)
         }
     }
 

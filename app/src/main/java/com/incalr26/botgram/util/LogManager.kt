@@ -1,7 +1,9 @@
 package com.incalr26.botgram.util
 
 import android.content.Context
+import java.io.BufferedReader
 import java.io.File
+import java.io.InputStreamReader
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -14,7 +16,7 @@ object LogManager {
         val dir = File(context.getExternalFilesDir(null), LOG_DIR)
         if (!dir.exists()) dir.mkdirs()
         val dateStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-        return File(dir, "botgram_$dateStr.log")
+        return File(dir, "botgram_api_$dateStr.log")
     }
 
     fun write(context: Context, message: String) {
@@ -27,13 +29,36 @@ object LogManager {
         }
     }
 
-    fun getLogContent(context: Context): String {
+    fun getApiLogContent(context: Context): String {
         val file = getLogFile(context)
-        return if (file.exists()) file.readText() else "暂无日志"
+        return if (file.exists()) file.readText() else "暂无通讯日志"
+    }
+    
+    fun getSystemLogContent(): String {
+        return try {
+            val process = Runtime.getRuntime().exec("logcat -d -t 500 -v time")
+            val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+            val log = StringBuilder()
+            var line: String?
+            while (bufferedReader.readLine().also { line = it } != null) {
+                log.append(line).append("\n")
+            }
+            if (log.isEmpty()) "暂无系统运行日志" else log.toString()
+        } catch (e: Exception) {
+            "无法获取系统日志: ${e.message}"
+        }
     }
 
-    fun clearLogs(context: Context) {
+    fun clearApiLogs(context: Context) {
         val dir = File(context.getExternalFilesDir(null), LOG_DIR)
         dir.listFiles()?.forEach { it.delete() }
+    }
+    
+    fun clearSystemLogs() {
+        try {
+            Runtime.getRuntime().exec("logcat -c")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
