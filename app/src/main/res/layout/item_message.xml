@@ -36,33 +36,6 @@
         android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp">
 
-        <!-- 引用预览 -->
-        <LinearLayout
-            android:id="@+id/replyContainer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:visibility="gone"
-            android:layout_marginBottom="4dp"
-            android:background="@drawable/quote_background">
-
-            <View
-                android:layout_width="4dp"
-                android:layout_height="match_parent"
-                android:background="?attr/colorPrimary" />
-
-            <TextView
-                android:id="@+id/replyPreview"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:textSize="13sp"
-                android:textColor="?attr/colorOnSurface"
-                android:maxLines="3"
-                android:ellipsize="end"
-                android:padding="6dp" />
-        </LinearLayout>
-
         <TextView
             android:id="@+id/senderName"
             android:layout_width="wrap_content"
@@ -70,14 +43,86 @@
             android:textSize="12sp"
             android:textColor="?attr/colorSecondary" />
 
-        <TextView
-            android:id="@+id/messageText"
+        <LinearLayout
+            android:id="@+id/bubbleContainer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:layout_marginTop="2dp"
-            android:background="?attr/colorPrimaryContainer"
-            android:padding="8dp"
-            android:textAppearance="?attr/textAppearanceBodyMedium" />
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/forwardInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textStyle="italic"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone"
+                android:layout_marginBottom="4dp" />
+
+            <LinearLayout
+                android:id="@+id/replyContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/quote_background">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="match_parent"
+                    android:background="?attr/colorPrimary" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="6dp"
+                    android:layout_marginStart="2dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        
+                        <TextView
+                            android:id="@+id/replyName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/replyMeta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:textSize="10sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/replyPreview"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="1dp"
+                        android:textSize="13sp"
+                        android:textColor="?attr/colorOnSurface"
+                        android:maxLines="2"
+                        android:ellipsize="end" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/messageText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/messageInfo"

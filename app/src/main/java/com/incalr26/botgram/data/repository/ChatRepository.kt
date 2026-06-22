@@ -38,6 +38,22 @@ class ChatRepository(private val dbHelper: DatabaseHelper) {
         _allChats.postValue(chats)
     }
 
+    suspend fun getAllChatsList(): List<ChatEntity> = withContext(Dispatchers.IO) {
+        val db = dbHelper.readableDatabase
+        val hash = currentHash()
+        val cursor: Cursor = db.query(
+            DatabaseHelper.TABLE_CHATS, null,
+            "${DatabaseHelper.COL_ACCOUNT_HASH} = ?", arrayOf(hash),
+            null, null, "${DatabaseHelper.COL_LAST_TIME} DESC"
+        )
+        val chats = mutableListOf<ChatEntity>()
+        while (cursor.moveToNext()) {
+            chats.add(chatFromCursor(cursor))
+        }
+        cursor.close()
+        chats
+    }
+
     suspend fun getChatById(chatId: Long): ChatEntity? = withContext(Dispatchers.IO) {
         val db = dbHelper.readableDatabase
         val hash = currentHash()

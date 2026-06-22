@@ -1,5 +1,6 @@
 package com.incalr26.botgram.ui.main
 
+import android.content.Context
 import android.content.Intent
 import android.text.Spannable
 import android.text.SpannableString
@@ -34,14 +35,24 @@ class MessageAdapter(
     private val onLongClick: ((MessageEntity, View) -> Boolean)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
+    private val fullDateFormat = SimpleDateFormat("yy年MM月dd日 HH:mm", Locale.getDefault())
+    private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val avatar: ImageView = view.findViewById(R.id.avatar)
         val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
         val senderName: TextView = view.findViewById(R.id.senderName)
+        val bubbleContainer: LinearLayout = view.findViewById(R.id.bubbleContainer)
         val messageText: TextView = view.findViewById(R.id.messageText)
         val messageInfo: TextView = view.findViewById(R.id.messageInfo)
+        
+        val forwardInfo: TextView = view.findViewById(R.id.forwardInfo)
         val replyContainer: LinearLayout = view.findViewById(R.id.replyContainer)
+        val replyName: TextView = view.findViewById(R.id.replyName)
+        val replyMeta: TextView = view.findViewById(R.id.replyMeta)
         val replyPreview: TextView = view.findViewById(R.id.replyPreview)
+        
         val container: LinearLayout = view as LinearLayout
         var boundMessageId: Long = 0L
         var loadJob: Job? = null
@@ -57,15 +68,16 @@ class MessageAdapter(
         val isOutgoing = message.isOutgoing
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
+        val ctx = holder.itemView.context
 
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
             holder.avatarFallback.visibility = View.GONE
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_RTL
-            holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.outgoing_bg)
+            holder.bubbleContainer.background = ctx.getDrawable(R.drawable.outgoing_bg)
         } else {
             holder.container.layoutDirection = View.LAYOUT_DIRECTION_LTR
-            holder.messageText.background = holder.itemView.context.getDrawable(R.drawable.incoming_bg)
+            holder.bubbleContainer.background = ctx.getDrawable(R.drawable.incoming_bg)
             val senderName = message.senderName ?: "?"
             val fallback = senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.text = fallback
@@ -93,16 +105,51 @@ class MessageAdapter(
                 nameBuilder.append(" [$title]")
             }
         }
-
         holder.senderName.text = nameBuilder.toString()
+
+        val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
+
+        if (rawObj.has("forward_origin")) {
+            val origin = rawObj.getJSONObject("forward_origin")
+            val type = origin.optString("type")
+            val fName = when (type) {
+                "user" -> origin.optJSONObject("sender_user")?.optString("first_name") ?: "未知"
+                "chat", "channel" -> origin.optJSONObject("chat")?.optString("title") ?: "未知"
+                "hidden_user" -> origin.optString("sender_user_name", "未知用户")
+                else -> "未知"
+            }
+            val fDate = origin.optLong("date", 0L)
+            val dStr = if (fDate > 0) shortDateFormat.format(Date(fDate * 1000)) else ""
+            holder.forwardInfo.text = "转发自 $fName $dStr"
+            holder.forwardInfo.visibility = View.VISIBLE
+        } else if (rawObj.has("forward_from") || rawObj.has("forward_from_chat") || rawObj.has("forward_sender_name")) {
+            val fName = rawObj.optJSONObject("forward_from")?.optString("first_name")
+                ?: rawObj.optJSONObject("forward_from_chat")?.optString("title")
+                ?: rawObj.optString("forward_sender_name", "未知")
+            val fDate = rawObj.optLong("forward_date", 0L)
+            val dStr = if (fDate > 0) shortDateFormat.format(Date(fDate * 1000)) else ""
+            holder.forwardInfo.text = "转发自 $fName $dStr"
+            holder.forwardInfo.visibility = View.VISIBLE
+        } else {
+            holder.forwardInfo.visibility = View.GONE
+        }
 
         if (!message.replyToJson.isNullOrEmpty()) {
             try {
                 val replyMsg = JSONObject(message.replyToJson)
+                val replyId = replyMsg.optLong("message_id", 0L)
+                val replyDate = replyMsg.optLong("date", 0L)
                 val replyText = replyMsg.optString("text", null) ?: "[媒体消息]"
                 val replySender = replyMsg.optJSONObject("from")?.optString("first_name") ?: "未知"
+                
+                holder.replyName.text = replySender
+                holder.replyPreview.text = replyText
+                
+                val rTimeStr = if (replyDate > 0) shortDateFormat.format(Date(replyDate * 1000)) else ""
+                val metaStr = if (replyId > 0) "ID:$replyId $rTimeStr" else rTimeStr
+                holder.replyMeta.text = metaStr
+                
                 holder.replyContainer.visibility = View.VISIBLE
-                holder.replyPreview.text = "$replySender: $replyText"
             } catch (e: Exception) {
                 holder.replyContainer.visibility = View.GONE
             }
@@ -127,12 +174,12 @@ class MessageAdapter(
             spannable.setSpan(object : ClickableSpan() {
                 override fun onClick(widget: View) {
                     val url = urlSpan.url
-                    MaterialAlertDialogBuilder(holder.itemView.context)
+                    MaterialAlertDialogBuilder(ctx)
                         .setTitle("打开链接")
                         .setMessage("是否打开以下链接？\n\n$url")
                         .setPositiveButton("打开") { _, _ ->
                             val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                            holder.itemView.context.startActivity(intent)
+                            ctx.startActivity(intent)
                         }
                         .setNegativeButton("取消", null)
                         .show()
@@ -156,21 +203,20 @@ class MessageAdapter(
             SimpleDateFormat("yy年MM月dd日", Locale.getDefault())
         }
         val dateStr = dateFormat.format(Date(message.date * 1000))
-        val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        val timeStr = timeFormat.format(Date(message.date * 1000))
-        holder.messageInfo.text = "ID:${message.messageId}  $dateStr $timeStr"
+        val tStr = timeFormat.format(Date(message.date * 1000))
+        holder.messageInfo.text = "ID:${message.messageId}  $dateStr $tStr"
 
-        val prefs = holder.itemView.context.getSharedPreferences("botgram_prefs", android.content.Context.MODE_PRIVATE)
+        val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
         val useRealAvatar = prefs.getBoolean("use_real_avatar", true)
         if (!isOutgoing && useRealAvatar) {
             val userId = message.senderUserId
-            if (userId != null) {
+            if (userId != null && userId != 0L) {
                 holder.loadJob?.cancel()
                 holder.loadJob = CoroutineScope(Dispatchers.Main).launch {
                     if (holder.boundMessageId != currentMsgId) return@launch
                     val avatarUrl = AvatarHelper.getUserAvatar(userId)
                     if (!avatarUrl.isNullOrEmpty()) {
-                        val request = ImageRequest.Builder(holder.itemView.context)
+                        val request = ImageRequest.Builder(ctx)
                             .data(avatarUrl)
                             .crossfade(true)
                             .transformations(CircleCropTransformation())
@@ -185,7 +231,7 @@ class MessageAdapter(
                                 onError = { _, _ -> }
                             )
                             .build()
-                        Coil.imageLoader(holder.itemView.context).enqueue(request)
+                        Coil.imageLoader(ctx).enqueue(request)
                     }
                 }
             }

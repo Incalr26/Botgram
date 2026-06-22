@@ -230,7 +230,9 @@ class ChatActivity : AppCompatActivity() {
 
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_plus_one_outline, 2),
+            Triple("直接复读", R.drawable.ic_plus_one_outline, 2),
+            Triple("复读", R.drawable.ic_repeat, 6),
+            Triple("转发", R.drawable.ic_send, 7),
             Triple("回复", R.drawable.ic_reply, 4)
         )
         if (chatType != "private") {
@@ -322,6 +324,86 @@ class ChatActivity : AppCompatActivity() {
                         clipboard.setPrimaryClip(ClipData.newPlainText("link", link))
                         Toast.makeText(this@ChatActivity, "链接已复制", Toast.LENGTH_SHORT).show()
                     }
+                }
+            }
+            6 -> {
+                forwardMessage(message, chatId)
+            }
+            7 -> {
+                showForwardDialog(message)
+            }
+        }
+    }
+
+    private fun showForwardDialog(message: MessageEntity) {
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val chats = chatRepository.getAllChatsList()
+            withContext(Dispatchers.Main) {
+                if (chats.isEmpty()) {
+                    Toast.makeText(this@ChatActivity, "没有可转发的会话", Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                val chatNames = chats.map { 
+                    if (it.type == "private") it.firstName ?: it.username ?: "私聊"
+                    else it.title ?: "群组"
+                }.toTypedArray()
+                
+                MaterialAlertDialogBuilder(this@ChatActivity)
+                    .setTitle("转发给...")
+                    .setItems(chatNames) { _, which ->
+                        val targetChatId = chats[which].chatId
+                        forwardMessage(message, targetChatId)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun forwardMessage(message: MessageEntity, targetChatId: Long) {
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+            val url = "https://api.telegram.org/bot$token/forwardMessage"
+            val jsonBody = JSONObject().apply {
+                put("chat_id", targetChatId)
+                put("from_chat_id", message.chatId)
+                put("message_id", message.messageId)
+            }
+            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())
+            val request = Request.Builder().url(url).post(requestBody).build()
+            val response = ApiClient.getClient().newCall(request).execute()
+            if (response.isSuccessful) {
+                val msg = JSONObject(response.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result")
+                    
+                    val messageEntity = MessageEntity(
+                        messageId = result.getLong("message_id"),
+                        chatId = targetChatId,
+                        senderUserId = null,
+                        senderName = "我",
+                        text = result.optString("text", "[转发消息]"),
+                        date = result.getLong("date"),
+                        isOutgoing = true,
+                        rawJson = result.toString(),
+                        entities = null,
+                        replyToJson = null,
+                        senderRole = null,
+                        senderTitle = null
+                    )
+                    messageRepository.insertMessage(messageEntity)
+                    chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000)
+                    
+                    if (targetChatId == chatId) {
+                        loadMessagesInternal()
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ChatActivity, "转发失败", Toast.LENGTH_SHORT).show()
                 }
             }
         }
