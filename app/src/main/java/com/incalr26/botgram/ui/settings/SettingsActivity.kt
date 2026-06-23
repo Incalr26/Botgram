@@ -8,11 +8,13 @@ import android.text.TextWatcher
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import coil.Coil
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.incalr26.botgram.R
@@ -23,6 +25,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SettingsActivity : AppCompatActivity() {
+
+    private fun formatSize(size: Long): String {
+        if (size <= 0) return "0 B"
+        if (size < 1024) return "${size} B"
+        if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024f)
+        if (size < 1024 * 1024 * 1024) return String.format("%.2f MB", size / (1024f * 1024f))
+        return String.format("%.2f GB", size / (1024f * 1024f * 1024f))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -61,7 +72,7 @@ class SettingsActivity : AppCompatActivity() {
         
         var currentPath = prefs.getString("media_save_path", "Download/Botgram") ?: "Download/Botgram"
         pathInput.setText(currentPath)
-        saveBtn.isEnabled = false
+        saveBtn.isEnabled = false // 禁用时由 Material 3 自动变灰
 
         pathInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -77,7 +88,7 @@ class SettingsActivity : AppCompatActivity() {
                 currentPath = newPath
                 prefs.edit().putString("media_save_path", newPath).apply()
                 saveBtn.isEnabled = false
-                Toast.makeText(this, "长按下载路径已保存", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "保存路径已更新", Toast.LENGTH_SHORT).show()
                 pathInput.clearFocus()
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.hideSoftInputFromWindow(pathInput.windowToken, 0)
@@ -86,14 +97,32 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        findViewById<View>(R.id.clearCacheLayout).setOnClickListener {
-            prefs.edit().remove("unlocked_media").apply()
-            CoroutineScope(Dispatchers.IO).launch {
-                Coil.imageLoader(this@SettingsActivity).diskCache?.clear()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "媒体缓存与浏览记录已清空", Toast.LENGTH_SHORT).show()
-                }
+        val clearSubtitle = findViewById<TextView>(R.id.clearCacheSubtitle)
+        
+        // 异步计算缓存大小
+        CoroutineScope(Dispatchers.IO).launch {
+            val cacheSize = Coil.imageLoader(this@SettingsActivity).diskCache?.size ?: 0L
+            withContext(Dispatchers.Main) {
+                clearSubtitle.text = "当前占用: ${formatSize(cacheSize)}"
             }
+        }
+
+        findViewById<View>(R.id.clearCacheLayout).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("清除缓存")
+                .setMessage("这将会清理本地已下载的图片和贴纸缓存文件，确认要继续吗？")
+                .setPositiveButton("清除") { _, _ ->
+                    prefs.edit().remove("unlocked_media").apply()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        Coil.imageLoader(this@SettingsActivity).diskCache?.clear()
+                        withContext(Dispatchers.Main) {
+                            clearSubtitle.text = "当前占用: 0 B"
+                            Toast.makeText(this@SettingsActivity, "媒体缓存与记录已清空", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
         }
     }
 
