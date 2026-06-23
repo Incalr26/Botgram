@@ -10,9 +10,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import coil.Coil
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import com.incalr26.botgram.R
 import com.incalr26.botgram.ui.login.LoginActivity
 import kotlinx.coroutines.CoroutineScope
@@ -55,15 +55,13 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val pathInput = findViewById<TextInputEditText>(R.id.pathEditText)
-        val pathLayout = findViewById<TextInputLayout>(R.id.pathInputLayout)
-
-        pathInput.setText(prefs.getString("media_save_path", "Botgram"))
+        pathInput.setText(prefs.getString("media_save_path", "Download/Botgram"))
         
-        pathLayout.setEndIconOnClickListener {
+        findViewById<MaterialButton>(R.id.btnSavePath).setOnClickListener {
             val newPath = pathInput.text.toString().trim()
             if (newPath.isNotEmpty()) {
                 prefs.edit().putString("media_save_path", newPath).apply()
-                Toast.makeText(this, "下载路径已保存", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "媒体下载路径已更新", Toast.LENGTH_SHORT).show()
                 pathInput.clearFocus()
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.hideSoftInputFromWindow(pathInput.windowToken, 0)

@@ -48,7 +48,7 @@ jobs:
       - name: Rename APK
         run: |
           APK_ORIGINAL=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
-          NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}.apk"
+          NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}-debug.apk"
           mv "$APK_ORIGINAL" "app/build/outputs/apk/debug/$NEW_NAME"
           echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
 

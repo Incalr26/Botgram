@@ -111,8 +111,7 @@ class MessageAdapter(
         val nameBuilder = StringBuilder(message.senderName ?: "未知")
         val role = message.senderRole ?: ""
         val title = message.senderTitle
-        val isAdmin = role == "creator" || role == "administrator" || role == "owner"
-        if (isAdmin) {
+        if (role == "creator" || role == "administrator" || role == "owner") {
             val roleTag = if (role == "creator" || role == "owner") "群主" else "管理员"
             nameBuilder.append(if (!title.isNullOrBlank()) " [$roleTag $title]" else " [$roleTag]")
         } else if (!title.isNullOrBlank()) {
@@ -122,15 +121,13 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
-        if (rawObj.has("forward_origin")) {
-            val origin = rawObj.getJSONObject("forward_origin")
-            val fName = origin.optJSONObject("sender_user")?.optString("first_name") ?: origin.optJSONObject("chat")?.optString("title") ?: "未知"
-            val fDate = origin.optLong("date", 0L)
-            holder.forwardInfo.text = "转发自 $fName " + (if (fDate > 0) shortDateFormat.format(Date(fDate * 1000)) else "")
-            holder.forwardInfo.visibility = View.VISIBLE
-        } else if (rawObj.has("forward_from") || rawObj.has("forward_from_chat")) {
-            val fName = rawObj.optJSONObject("forward_from")?.optString("first_name") ?: rawObj.optJSONObject("forward_from_chat")?.optString("title") ?: "未知"
-            val fDate = rawObj.optLong("forward_date", 0L)
+        if (rawObj.has("forward_origin") || rawObj.has("forward_from") || rawObj.has("forward_from_chat")) {
+            val origin = rawObj.optJSONObject("forward_origin")
+            val fName = origin?.optJSONObject("sender_user")?.optString("first_name") 
+                        ?: origin?.optJSONObject("chat")?.optString("title") 
+                        ?: rawObj.optJSONObject("forward_from")?.optString("first_name") 
+                        ?: rawObj.optJSONObject("forward_from_chat")?.optString("title") ?: "未知"
+            val fDate = origin?.optLong("date", 0L) ?: rawObj.optLong("forward_date", 0L)
             holder.forwardInfo.text = "转发自 $fName " + (if (fDate > 0) shortDateFormat.format(Date(fDate * 1000)) else "")
             holder.forwardInfo.visibility = View.VISIBLE
         } else {
@@ -161,6 +158,9 @@ class MessageAdapter(
         val token = prefs.getString("bot_token", "") ?: ""
         val unlockedSet = prefs.getStringSet("unlocked_media", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
 
+        var actualText = message.text ?: ""
+        var mediaLabel = ""
+
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
             var fileId = ""
@@ -169,17 +169,24 @@ class MessageAdapter(
             var autoCache = false
             
             if (rawObj.has("photo")) {
+                actualText = rawObj.optString("caption", "")
+                mediaLabel = "[🖼️ 照片] "
                 val arr = rawObj.getJSONArray("photo")
                 val photoObj = arr.getJSONObject(arr.length() - 1)
                 fileId = photoObj.getString("file_id")
                 fileSize = photoObj.optLong("file_size", 0L)
                 autoCache = prefs.getBoolean("auto_image", false)
             } else if (rawObj.has("sticker")) {
+                actualText = ""
                 val stickerObj = rawObj.getJSONObject("sticker")
+                val emoji = stickerObj.optString("emoji", "")
+                mediaLabel = if (emoji.isNotEmpty()) "[贴纸 $emoji] " else "[贴纸] "
                 fileId = stickerObj.getString("file_id")
                 fileSize = stickerObj.optLong("file_size", 0L)
                 autoCache = prefs.getBoolean("auto_sticker", false)
             } else if (rawObj.has("video")) {
+                actualText = rawObj.optString("caption", "")
+                mediaLabel = "[🎬 视频] "
                 val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
                 fileSize = vid.optLong("file_size", 0L)
@@ -227,6 +234,8 @@ class MessageAdapter(
                 }
             }
         } else if (rawObj.has("document")) {
+            actualText = rawObj.optString("caption", "")
+            mediaLabel = "[📁 文件] "
             holder.fileContainer.visibility = View.VISIBLE
             val doc = rawObj.getJSONObject("document")
             holder.fileNameText.text = doc.optString("file_name", "未知文件")
@@ -243,12 +252,11 @@ class MessageAdapter(
             }
         }
 
-        val rawText = message.text ?: ""
-        if (rawText.isEmpty()) {
+        if (actualText.isEmpty()) {
             holder.messageText.visibility = View.GONE
         } else {
             holder.messageText.visibility = View.VISIBLE
-            val formatted = MessageFormatter.format(rawText, message.entities)
+            val formatted = MessageFormatter.format(actualText, message.entities)
             val spannable = if (formatted is Spannable) formatted else SpannableString(formatted ?: "")
             val urlSpans = spannable.getSpans(0, spannable.length, URLSpan::class.java)
             for (urlSpan in urlSpans) {
@@ -260,9 +268,7 @@ class MessageAdapter(
                         MaterialAlertDialogBuilder(ctx)
                             .setTitle("打开链接")
                             .setMessage(urlSpan.url)
-                            .setPositiveButton("打开") { _, _ ->
-                                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url)))
-                            }
+                            .setPositiveButton("打开") { _, _ -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) }
                             .setNegativeButton("取消", null).show()
                     }
                     override fun updateDrawState(ds: TextPaint) { super.updateDrawState(ds); ds.isUnderlineText = true }
@@ -279,7 +285,7 @@ class MessageAdapter(
         } else {
             SimpleDateFormat("yy年MM月dd日", Locale.getDefault()).format(Date(message.date * 1000))
         }
-        holder.messageInfo.text = "ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}"
+        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}"
 
         holder.loadJob?.cancel()
         if (!isOutgoing && prefs.getBoolean("use_real_avatar", true)) {

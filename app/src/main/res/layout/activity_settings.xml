@@ -107,28 +107,41 @@
                         android:layout_marginStart="16dp"
                         android:layout_marginEnd="16dp"
                         android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp"
                         android:text="自动缓存贴纸" />
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/pathInputLayout"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
                         android:layout_marginStart="16dp"
                         android:layout_marginEnd="16dp"
-                        android:layout_marginTop="20dp"
-                        android:layout_marginBottom="12dp"
-                        app:endIconMode="custom"
-                        app:endIconDrawable="@android:drawable/ic_menu_save"
-                        app:endIconTint="?attr/colorPrimary"
-                        android:hint="媒体保存目录 (位于 Download 目录下)">
-                        
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/pathEditText"
-                            android:layout_width="match_parent"
+                        android:layout_marginBottom="12dp">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:id="@+id/pathInputLayout"
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
                             android:layout_height="wrap_content"
-                            android:singleLine="true" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                            android:hint="媒体保存路径 (如 Download/Botgram)">
+                            
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/pathEditText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:singleLine="true" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnSavePath"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            android:text="保存" />
+                    </LinearLayout>
 
                     <View android:layout_width="match_parent" android:layout_height="1dp" android:background="?attr/colorSurfaceVariant" />
 
@@ -146,7 +159,7 @@
                             android:layout_width="24dp"
                             android:layout_height="24dp"
                             android:src="@android:drawable/ic_menu_delete"
-                            app:tint="?attr/colorError" />
+                            app:tint="#D32F2F" />
                         <TextView
                             android:layout_width="0dp"
                             android:layout_weight="1"
@@ -154,7 +167,8 @@
                             android:layout_marginStart="16dp"
                             android:text="清除媒体缓存"
                             android:textAppearance="?attr/textAppearanceBodyLarge"
-                            android:textColor="?attr/colorError" />
+                            android:textStyle="bold"
+                            android:textColor="#D32F2F" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

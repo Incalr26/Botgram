@@ -261,7 +261,7 @@ class ChatActivity : AppCompatActivity() {
             val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
             var fileId = ""
             var subDir = ""
-            var fName = "${message.messageId}"
+            var fName = "${chatId}_${message.messageId}_${System.currentTimeMillis()}"
             
             if (rawObj.has("photo")) {
                 val arr = rawObj.getJSONArray("photo")
@@ -281,14 +281,17 @@ class ChatActivity : AppCompatActivity() {
                 val doc = rawObj.getJSONObject("document")
                 fileId = doc.getString("file_id")
                 subDir = "Files"
-                fName = doc.optString("file_name", fName)
+                val origName = doc.optString("file_name", "")
+                if (origName.isNotEmpty() && origName.contains(".")) {
+                    fName += ".${origName.substringAfterLast('.')}"
+                }
             }
 
             val url = FileHelper.getTelegramFileUrl(fileId, token)
             if (!url.isNullOrEmpty()) {
-                val success = FileHelper.saveMediaToDownloads(this@ChatActivity, url, subDir, fName)
+                val success = FileHelper.saveMediaToStorage(this@ChatActivity, url, subDir, fName)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ChatActivity, if (success) "已保存到 Download 目录" else "保存失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ChatActivity, if (success) "已保存到设定目录" else "保存失败，请检查路径权限", Toast.LENGTH_SHORT).show()
                 }
             }
         }

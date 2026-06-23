@@ -31,23 +31,21 @@ object FileHelper {
         return@withContext null
     }
 
-    suspend fun saveMediaToDownloads(context: Context, url: String, subDir: String, fileName: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun saveMediaToStorage(context: Context, url: String, subDir: String, fileName: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url(url).build()
             val response = ApiClient.getClient().newCall(request).execute()
             if (response.isSuccessful && response.body != null) {
-                val baseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val prefs = context.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
-                val basePath = prefs.getString("media_save_path", "Botgram") ?: "Botgram"
+                val basePath = prefs.getString("media_save_path", "Download/Botgram") ?: "Download/Botgram"
                 
-                val targetDir = File(baseDir, "$basePath/$subDir")
-                if (!targetDir.exists()) targetDir.mkdirs()
+                var targetDir = File(Environment.getExternalStorageDirectory(), "$basePath/$subDir")
+                if (!targetDir.exists() && !targetDir.mkdirs()) {
+                    targetDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Botgram/$subDir")
+                    targetDir.mkdirs()
+                }
                 
-                val ext = url.substringAfterLast('.', "")
-                val cleanExt = if (ext.contains("?")) ext.substringBefore("?") else ext
-                val finalName = if (fileName.contains(".")) fileName else if (cleanExt.isNotEmpty()) "${fileName}.$cleanExt" else fileName
-                
-                val destFile = File(targetDir, finalName)
+                val destFile = File(targetDir, fileName)
                 
                 val inputStream = response.body!!.byteStream()
                 val outputStream = FileOutputStream(destFile)
