@@ -137,8 +137,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:adjustViewBounds="true"
-                        android:minWidth="120dp"
-                        android:minHeight="120dp"
+                        android:minWidth="140dp"
+                        android:minHeight="140dp"
                         android:maxWidth="260dp"
                         android:maxHeight="320dp"
                         android:scaleType="fitCenter" />
@@ -164,7 +164,7 @@
                             android:id="@+id/mediaOverlaySize"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="6dp"
                             android:textColor="@android:color/white"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -233,6 +233,7 @@
                 android:id="@+id/messageText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:breakStrategy="simple"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
 

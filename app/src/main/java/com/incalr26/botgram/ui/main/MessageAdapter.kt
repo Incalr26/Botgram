@@ -92,6 +92,11 @@ class MessageAdapter(
         holder.boundMessageId = currentMsgId
         val ctx = holder.itemView.context
 
+        // 清除幽灵回调：向复用 ImageView 派发空任务中断底层残留请求
+        val clearReq = ImageRequest.Builder(ctx).data(null).target(holder.mediaImage).build()
+        Coil.imageLoader(ctx).enqueue(clearReq)
+        holder.mediaImage.setImageDrawable(null)
+
         if (isOutgoing) {
             holder.avatar.visibility = View.GONE
             holder.avatarFallback.visibility = View.GONE
@@ -152,7 +157,6 @@ class MessageAdapter(
         holder.mediaContainer.visibility = View.GONE
         holder.fileContainer.visibility = View.GONE
         holder.mediaJob?.cancel()
-        holder.mediaImage.setImageDrawable(null)
         
         val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
         val token = prefs.getString("bot_token", "") ?: ""
@@ -170,7 +174,7 @@ class MessageAdapter(
             
             if (rawObj.has("photo")) {
                 actualText = rawObj.optString("caption", "")
-                mediaLabel = "[🖼️ 照片] "
+                mediaLabel = "[图片] "
                 val arr = rawObj.getJSONArray("photo")
                 val photoObj = arr.getJSONObject(arr.length() - 1)
                 fileId = photoObj.getString("file_id")
@@ -186,7 +190,7 @@ class MessageAdapter(
                 autoCache = prefs.getBoolean("auto_sticker", false)
             } else if (rawObj.has("video")) {
                 actualText = rawObj.optString("caption", "")
-                mediaLabel = "[🎬 视频] "
+                mediaLabel = "[视频] "
                 val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
                 fileSize = vid.optLong("file_size", 0L)
@@ -235,7 +239,7 @@ class MessageAdapter(
             }
         } else if (rawObj.has("document")) {
             actualText = rawObj.optString("caption", "")
-            mediaLabel = "[📁 文件] "
+            mediaLabel = "[文件] "
             holder.fileContainer.visibility = View.VISIBLE
             val doc = rawObj.getJSONObject("document")
             holder.fileNameText.text = doc.optString("file_name", "未知文件")

@@ -3,6 +3,8 @@ package com.incalr26.botgram.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -55,13 +57,27 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         val pathInput = findViewById<TextInputEditText>(R.id.pathEditText)
-        pathInput.setText(prefs.getString("media_save_path", "Download/Botgram"))
+        val saveBtn = findViewById<MaterialButton>(R.id.btnSavePath)
         
-        findViewById<MaterialButton>(R.id.btnSavePath).setOnClickListener {
+        var currentPath = prefs.getString("media_save_path", "Download/Botgram") ?: "Download/Botgram"
+        pathInput.setText(currentPath)
+        saveBtn.isEnabled = false
+
+        pathInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                saveBtn.isEnabled = s?.toString()?.trim() != currentPath
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        
+        saveBtn.setOnClickListener {
             val newPath = pathInput.text.toString().trim()
             if (newPath.isNotEmpty()) {
+                currentPath = newPath
                 prefs.edit().putString("media_save_path", newPath).apply()
-                Toast.makeText(this, "媒体下载路径已更新", Toast.LENGTH_SHORT).show()
+                saveBtn.isEnabled = false
+                Toast.makeText(this, "长按下载路径已保存", Toast.LENGTH_SHORT).show()
                 pathInput.clearFocus()
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 imm.hideSoftInputFromWindow(pathInput.windowToken, 0)
@@ -75,7 +91,7 @@ class SettingsActivity : AppCompatActivity() {
             CoroutineScope(Dispatchers.IO).launch {
                 Coil.imageLoader(this@SettingsActivity).diskCache?.clear()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "媒体缓存与记录已清空", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, "媒体缓存与浏览记录已清空", Toast.LENGTH_SHORT).show()
                 }
             }
         }
