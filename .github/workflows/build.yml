@@ -1,99 +1,40 @@
-name: Build and Release APK
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build release APK (debug signed)
-        run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
-
-      - name: Get version name
-        id: get_version
-        run: |
-          VERSION=$(grep 'versionName' app/build.gradle | awk -F '"' '{print $2}')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Get commit details
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          COMMIT_MSG=$(git log -1 --pretty=%s)
-          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          echo "COMMIT_MSG=$COMMIT_MSG" >> $GITHUB_ENV
-
-      - name: Get actor
-        run: echo "ACTOR=${{ github.actor }}" >> $GITHUB_ENV
-
-      - name: Rename APK
-        run: |
-          APK_ORIGINAL=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
-          NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}-release.apk"
-          mv "$APK_ORIGINAL" "app/build/outputs/apk/release/$NEW_NAME"
-          echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
-
-      - name: Create Release and upload APK
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="Botgram-v${VERSION}-${SHORT_SHA}"
-          RELEASE_NAME="Botgram-v${VERSION}-${SHORT_SHA}"
-          release_response=$(curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/releases \
-            -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
-          upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
-          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Content-Type: application/zip" \
-            --data-binary @"$APK_PATH" \
-            "${upload_url}?name=${APK_NAME}"
-          RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
-          echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
-
-      - name: Send APK to Telegram (get message ID)
-        id: send_apk
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-          response=$(curl -s -F "chat_id=${CHAT_ID}" \
-               -F "document=@${APK_PATH}" \
-               https://api.telegram.org/bot${BOT_TOKEN}/sendDocument)
-          MESSAGE_ID=$(echo "$response" | jq -r '.result.message_id')
-          echo "MESSAGE_ID=$MESSAGE_ID" >> $GITHUB_ENV
-
-      - name: Edit caption with download links
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          CAPTION="版本: ${VERSION}
-          提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
-          >${COMMIT_MSG}
-          触发者: ${ACTOR}
-          下载: [Botgram_Channel](https://t.me/Botgram_Channel/${MESSAGE_ID}) | [Github](${RELEASE_URL})"
-          curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption" \
-               -d "chat_id=${CHAT_ID}" \
-               -d "message_id=${MESSAGE_ID}" \
-               --data-urlencode "caption=${CAPTION}" \
-               -d "parse_mode=Markdown"
+- name: Create Release and upload APK
+  id: create_release
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    TAG="Botgram-v${VERSION}-${SHORT_SHA}"
+    RELEASE_NAME="Botgram-v${VERSION}-${SHORT_SHA}"
+    # 打印请求参数（方便核对）
+    echo "Creating release with tag: $TAG, name: $RELEASE_NAME"
+    
+    # 发送创建请求并保存响应
+    release_response=$(curl -X POST \
+      -H "Authorization: token $GITHUB_TOKEN" \
+      -H "Accept: application/vnd.github.v3+json" \
+      https://api.github.com/repos/${{ github.repository }}/releases \
+      -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
+    
+    # 打印完整响应（用于调试）
+    echo "Release API response: $release_response"
+    
+    # 提取 upload_url
+    upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
+    echo "Extracted upload_url: $upload_url"
+    
+    # 如果 upload_url 为空，打印错误并退出
+    if [ -z "$upload_url" ] || [ "$upload_url" = "null" ]; then
+      echo "Error: Failed to extract upload_url. Check API response above."
+      exit 1
+    fi
+    
+    # 上传 APK
+    APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
+    curl -X POST \
+      -H "Authorization: token $GITHUB_TOKEN" \
+      -H "Content-Type: application/zip" \
+      --data-binary @"$APK_PATH" \
+      "${upload_url}?name=${APK_NAME}"
+    
+    RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
+    echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
