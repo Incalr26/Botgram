@@ -1,15 +1,11 @@
-- name: Build release APK (debug signed)
-  run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
-
+name: Build and Release APK
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,7 +22,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK (debug signed)
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
 
       - name: Get version name
         id: get_version
