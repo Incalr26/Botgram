@@ -7,6 +7,11 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
+    // 仅在本地 Termux（非 CI）环境设置 AAPT2 路径
+    if (System.getenv('CI') == null) {
+        aapt2FromMavenOverride "/data/data/com.termux/files/usr/bin/aapt2"
+    }
+
     def buildTimeMillis = System.currentTimeMillis()
     def buildDate = new Date(buildTimeMillis).format('yyyy-MM-dd')
 
