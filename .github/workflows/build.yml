@@ -22,7 +22,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK (debug signed)
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
 
       - name: Get version name
         id: get_version
@@ -54,19 +54,12 @@ jobs:
         run: |
           TAG="Botgram-v${VERSION}-${SHORT_SHA}"
           RELEASE_NAME="Botgram-v${VERSION}-${SHORT_SHA}"
-          echo "Creating release with tag: $TAG, name: $RELEASE_NAME"
           release_response=$(curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
-          echo "Release API response: $release_response"
           upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
-          echo "Extracted upload_url: $upload_url"
-          if [ -z "$upload_url" ] || [ "$upload_url" = "null" ]; then
-            echo "Error: Failed to extract upload_url. Check API response above."
-            exit 1
-          fi
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
