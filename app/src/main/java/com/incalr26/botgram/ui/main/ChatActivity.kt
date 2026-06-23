@@ -52,13 +52,11 @@ class ChatActivity : AppCompatActivity() {
     private var replyToMessageId: Long? = null
     private var chatType: String = "private"
 
-    // 媒体发送状态
     private var pendingUploadUri: Uri? = null
-    private var pendingUploadType: String? = null // "photo", "video", "document"
+    private var pendingUploadType: String? = null 
 
     private val crashHandler = CoroutineExceptionHandler { _, throwable -> gotoCrash(throwable) }
 
-    // 原生系统媒体选择器
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "photo") }
     private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "video") }
     private val pickFileLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "document") }
@@ -110,20 +108,23 @@ class ChatActivity : AppCompatActivity() {
             val attachButton = findViewById<ImageButton>(R.id.attachButton)
             val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
 
-            // 发送按钮状态判断
+            // 发送按钮的严格颜色管理
             fun updateSendButtonState() {
                 val hasText = messageInput.text.toString().trim().isNotEmpty()
                 val hasMedia = pendingUploadUri != null
                 if (hasText || hasMedia) {
                     sendButton.isEnabled = true
-                    sendButton.clearColorFilter() // 清除置灰，恢复原状！
+                    sendButton.clearColorFilter() // 清除滤镜，恢复原本的高亮色
+                    sendButton.alpha = 1.0f
                 } else {
                     sendButton.isEnabled = false
-                    // 未发送状态变灰（颜色发暗以示禁用）
+                    // 未输入时强制置换为灰色 (#9E9E9E)
                     sendButton.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN)
+                    sendButton.alpha = 0.5f
                 }
             }
-            updateSendButtonState() // 初始化置灰
+            // 初始化时立刻置灰
+            updateSendButtonState()
 
             messageInput.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -153,7 +154,6 @@ class ChatActivity : AppCompatActivity() {
                     sendTextMessage(text, replyToMessageId)
                 }
                 
-                // 发送完毕清理状态
                 replyToMessageId = null
                 replyBanner.visibility = View.GONE
                 pendingUploadUri = null
@@ -188,7 +188,7 @@ class ChatActivity : AppCompatActivity() {
         when (type) {
             "photo" -> {
                 previewTitle.text = "已选择图片"
-                previewIcon.setImageURI(uri) // 显示图片略缩图
+                previewIcon.setImageURI(uri)
                 previewIcon.clearColorFilter()
             }
             "video" -> {
@@ -203,16 +203,17 @@ class ChatActivity : AppCompatActivity() {
             }
         }
         
-        // 恢复发送按钮颜色
-        findViewById<ImageButton>(R.id.sendButton).isEnabled = true
-        findViewById<ImageButton>(R.id.sendButton).clearColorFilter()
+        val sendButton = findViewById<ImageButton>(R.id.sendButton)
+        sendButton.isEnabled = true
+        sendButton.clearColorFilter()
+        sendButton.alpha = 1.0f
     }
 
     private fun showAttachMenu(anchor: View) {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
-            elevation = 12f * resources.displayMetrics.density
+            elevation = 16f * resources.displayMetrics.density
             clipToOutline = true
         }
 
@@ -222,7 +223,6 @@ class ChatActivity : AppCompatActivity() {
         theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
         val primaryColor = typedValue.data
 
-        // 模仿长按菜单的清爽图标
         val items = listOf(
             Triple("照片/图库", android.R.drawable.ic_menu_gallery, 1),
             Triple("发送视频", android.R.drawable.presence_video_online, 2),
@@ -260,10 +260,11 @@ class ChatActivity : AppCompatActivity() {
         val popupHeight = container.measuredHeight
         val anchorLocation = IntArray(2)
         anchor.getLocationOnScreen(anchorLocation)
-        // 挂在加号按钮上方
-        val xOff = 0
-        val yOff = -(anchor.height + popupHeight)
-        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
+        
+        // 浮动在附件加号按钮正上方
+        val xPos = anchorLocation[0]
+        val yPos = anchorLocation[1] - popupHeight - (16 * resources.displayMetrics.density).toInt()
+        popupWindow.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, xPos, yPos)
     }
 
     private fun uploadMediaAndSend(caption: String) {
@@ -296,7 +297,6 @@ class ChatActivity : AppCompatActivity() {
             val req = Request.Builder().url("https://api.telegram.org/bot$token/$apiMethod").post(requestBodyBuilder.build()).build()
             val res = ApiClient.getClient().newCall(req).execute()
             
-            // 清理临时文件
             file.delete()
 
             if (res.isSuccessful) {
@@ -418,15 +418,19 @@ class ChatActivity : AppCompatActivity() {
 
         container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupHeight = container.measuredHeight
-        val bubble = anchor.findViewById<View>(R.id.messageText) ?: anchor
-        val bubbleLocation = IntArray(2)
-        bubble.getLocationOnScreen(bubbleLocation)
-        val xOff = bubbleLocation[0] - IntArray(2).apply { anchor.getLocationOnScreen(this) }[0]
-        var yOff = 0
-        if (bubbleLocation[1] + bubble.height + popupHeight > resources.displayMetrics.heightPixels) {
-            yOff = bubbleLocation[1] - popupHeight - (IntArray(2).apply { anchor.getLocationOnScreen(this) }[1] + anchor.height)
+        
+        // 绝对坐标法：精确防越界翻转
+        val anchorLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        val screenHeight = resources.displayMetrics.heightPixels
+
+        var yPos = anchorLocation[1] + anchor.height
+        if (yPos + popupHeight > screenHeight) {
+            yPos = anchorLocation[1] - popupHeight
         }
-        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
+        if (yPos < 0) yPos = 50
+
+        popupWindow.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, anchorLocation[0], yPos)
     }
 
     private fun handleMenuAction(action: Int, message: MessageEntity) {

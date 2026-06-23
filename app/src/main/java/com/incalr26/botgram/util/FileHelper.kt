@@ -2,7 +2,9 @@ package com.incalr26.botgram.util
 
 import android.content.Context
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Environment
+import android.provider.OpenableColumns
 import com.incalr26.botgram.data.remote.ApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,7 +48,6 @@ object FileHelper {
                 }
                 
                 val destFile = File(targetDir, fileName)
-                
                 val inputStream = response.body!!.byteStream()
                 val outputStream = FileOutputStream(destFile)
                 inputStream.copyTo(outputStream)
@@ -60,5 +61,28 @@ object FileHelper {
             e.printStackTrace()
         }
         return@withContext false
+    }
+
+    // 将系统选取的 Uri 复制到私有缓存区供上传读取
+    suspend fun uriToTempFile(context: Context, uri: Uri): File? = withContext(Dispatchers.IO) {
+        try {
+            var fileName = "upload_file_${System.currentTimeMillis()}"
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) fileName = cursor.getString(nameIndex)
+                }
+            }
+            val tempFile = File(context.cacheDir, fileName)
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+            val outputStream = FileOutputStream(tempFile)
+            inputStream.copyTo(outputStream)
+            outputStream.close()
+            inputStream.close()
+            return@withContext tempFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext null
+        }
     }
 }
