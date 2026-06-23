@@ -4,6 +4,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.PorterDuff
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -14,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -23,7 +27,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -34,7 +37,9 @@ import com.incalr26.botgram.util.FileHelper
 import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
@@ -47,7 +52,16 @@ class ChatActivity : AppCompatActivity() {
     private var replyToMessageId: Long? = null
     private var chatType: String = "private"
 
+    // 媒体发送状态
+    private var pendingUploadUri: Uri? = null
+    private var pendingUploadType: String? = null // "photo", "video", "document"
+
     private val crashHandler = CoroutineExceptionHandler { _, throwable -> gotoCrash(throwable) }
+
+    // 原生系统媒体选择器
+    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "photo") }
+    private val pickVideoLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "video") }
+    private val pickFileLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri -> handleMediaSelected(uri, "document") }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,7 +84,6 @@ class ChatActivity : AppCompatActivity() {
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            supportActionBar?.title = "聊天"
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
@@ -97,32 +110,56 @@ class ChatActivity : AppCompatActivity() {
             val attachButton = findViewById<ImageButton>(R.id.attachButton)
             val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
 
+            // 发送按钮状态判断
+            fun updateSendButtonState() {
+                val hasText = messageInput.text.toString().trim().isNotEmpty()
+                val hasMedia = pendingUploadUri != null
+                if (hasText || hasMedia) {
+                    sendButton.isEnabled = true
+                    sendButton.clearColorFilter() // 清除置灰，恢复原状！
+                } else {
+                    sendButton.isEnabled = false
+                    // 未发送状态变灰（颜色发暗以示禁用）
+                    sendButton.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN)
+                }
+            }
+            updateSendButtonState() // 初始化置灰
+
             messageInput.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    val hasText = s?.toString()?.trim()?.isNotEmpty() == true
-                    sendButton.alpha = if (hasText) 1.0f else 0.4f
-                    sendButton.isEnabled = hasText
-                }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { updateSendButtonState() }
                 override fun afterTextChanged(s: Editable?) {}
             })
-            sendButton.isEnabled = false // 初始禁用
 
-            attachButton.setOnClickListener { showAttachMenu() }
+            attachButton.setOnClickListener { showAttachMenu(attachButton) }
 
             findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
                 replyToMessageId = null
                 replyBanner.visibility = View.GONE
             }
 
+            findViewById<ImageButton>(R.id.cancelPreview).setOnClickListener {
+                pendingUploadUri = null
+                pendingUploadType = null
+                findViewById<LinearLayout>(R.id.mediaPreviewContainer).visibility = View.GONE
+                updateSendButtonState()
+            }
+
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
-                if (text.isNotEmpty()) {
+                if (pendingUploadUri != null) {
+                    uploadMediaAndSend(text)
+                } else if (text.isNotEmpty()) {
                     sendTextMessage(text, replyToMessageId)
-                    replyToMessageId = null
-                    replyBanner.visibility = View.GONE
-                    messageInput.text.clear()
                 }
+                
+                // 发送完毕清理状态
+                replyToMessageId = null
+                replyBanner.visibility = View.GONE
+                pendingUploadUri = null
+                pendingUploadType = null
+                findViewById<LinearLayout>(R.id.mediaPreviewContainer).visibility = View.GONE
+                messageInput.text.clear()
             }
 
             lifecycleScope.launch(Dispatchers.IO + crashHandler) {
@@ -138,43 +175,157 @@ class ChatActivity : AppCompatActivity() {
         } catch (e: Exception) { gotoCrash(e) }
     }
 
-    private fun showAttachMenu() {
-        val bottomSheetDialog = BottomSheetDialog(this)
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 32, 0, 32)
-        }
+    private fun handleMediaSelected(uri: Uri?, type: String) {
+        if (uri == null) return
+        pendingUploadUri = uri
+        pendingUploadType = type
 
-        val items = listOf(
-            Pair("图片 (相册)", android.R.drawable.ic_menu_gallery),
-            Pair("视频", android.R.drawable.presence_video_online),
-            Pair("文件", android.R.drawable.ic_menu_agenda)
-        )
+        val previewContainer = findViewById<LinearLayout>(R.id.mediaPreviewContainer)
+        val previewTitle = findViewById<TextView>(R.id.previewTitle)
+        val previewIcon = findViewById<ImageView>(R.id.previewIcon)
 
-        items.forEach { (title, iconRes) ->
-            val layout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(48, 36, 48, 36)
-                background = ContextCompat.getDrawable(this@ChatActivity, androidx.appcompat.R.drawable.abc_item_background_holo_light)
-                gravity = Gravity.CENTER_VERTICAL
-                setOnClickListener {
-                    Toast.makeText(this@ChatActivity, "底层文件选择与分发接口开发中...", Toast.LENGTH_SHORT).show()
-                    bottomSheetDialog.dismiss()
-                }
+        previewContainer.visibility = View.VISIBLE
+        when (type) {
+            "photo" -> {
+                previewTitle.text = "已选择图片"
+                previewIcon.setImageURI(uri) // 显示图片略缩图
+                previewIcon.clearColorFilter()
             }
-            val icon = ImageView(this).apply { setImageResource(iconRes) }
-            val text = TextView(this).apply {
-                this.text = title
-                textSize = 16f
-                setPadding(32, 0, 0, 0)
+            "video" -> {
+                previewTitle.text = "已选择视频"
+                previewIcon.setImageResource(android.R.drawable.presence_video_online)
+                previewIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
             }
-            layout.addView(icon)
-            layout.addView(text)
-            container.addView(layout)
+            "document" -> {
+                previewTitle.text = "已选择文件"
+                previewIcon.setImageResource(R.drawable.ic_file_document)
+                previewIcon.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+            }
         }
         
-        bottomSheetDialog.setContentView(container)
-        bottomSheetDialog.show()
+        // 恢复发送按钮颜色
+        findViewById<ImageButton>(R.id.sendButton).isEnabled = true
+        findViewById<ImageButton>(R.id.sendButton).clearColorFilter()
+    }
+
+    private fun showAttachMenu(anchor: View) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
+            elevation = 12f * resources.displayMetrics.density
+            clipToOutline = true
+        }
+
+        val typedValue = TypedValue()
+        theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
+        val textColor = typedValue.data
+        theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+        val primaryColor = typedValue.data
+
+        // 模仿长按菜单的清爽图标
+        val items = listOf(
+            Triple("照片/图库", android.R.drawable.ic_menu_gallery, 1),
+            Triple("发送视频", android.R.drawable.presence_video_online, 2),
+            Triple("发送文件", R.drawable.ic_file_document, 3)
+        )
+
+        val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+            isOutsideTouchable = true
+            isFocusable = true
+            setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent))
+        }
+
+        items.forEach { (title, iconRes, action) ->
+            val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
+            itemView.findViewById<ImageView>(R.id.menu_icon).apply { 
+                setImageResource(iconRes)
+                setColorFilter(primaryColor) 
+            }
+            itemView.findViewById<TextView>(R.id.menu_text).apply { 
+                text = title
+                setTextColor(textColor) 
+            }
+            itemView.setOnClickListener { 
+                popupWindow.dismiss()
+                when (action) {
+                    1 -> pickImageLauncher.launch("image/*")
+                    2 -> pickVideoLauncher.launch("video/*")
+                    3 -> pickFileLauncher.launch("*/*")
+                }
+            }
+            container.addView(itemView)
+        }
+
+        container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val popupHeight = container.measuredHeight
+        val anchorLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        // 挂在加号按钮上方
+        val xOff = 0
+        val yOff = -(anchor.height + popupHeight)
+        popupWindow.showAsDropDown(anchor, xOff, yOff, Gravity.START or Gravity.TOP)
+    }
+
+    private fun uploadMediaAndSend(caption: String) {
+        val uri = pendingUploadUri ?: return
+        val type = pendingUploadType ?: return
+        Toast.makeText(this, "正在上传发送...", Toast.LENGTH_SHORT).show()
+        
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+            val file = FileHelper.uriToTempFile(this@ChatActivity, uri) ?: return@launch
+
+            val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+            val requestBodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("chat_id", chatId.toString())
+                .addFormDataPart(type, file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
+
+            if (caption.isNotEmpty()) {
+                requestBodyBuilder.addFormDataPart("caption", caption)
+            }
+            replyToMessageId?.let {
+                requestBodyBuilder.addFormDataPart("reply_to_message_id", it.toString())
+            }
+
+            val apiMethod = when(type) {
+                "photo" -> "sendPhoto"
+                "video" -> "sendVideo"
+                else -> "sendDocument"
+            }
+
+            val req = Request.Builder().url("https://api.telegram.org/bot$token/$apiMethod").post(requestBodyBuilder.build()).build()
+            val res = ApiClient.getClient().newCall(req).execute()
+            
+            // 清理临时文件
+            file.delete()
+
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result")
+                    val messageEntity = MessageEntity(
+                        messageId = result.getLong("message_id"),
+                        chatId = chatId,
+                        senderUserId = null,
+                        senderName = "我",
+                        text = caption,
+                        date = result.getLong("date"),
+                        isOutgoing = true,
+                        rawJson = result.toString(),
+                        entities = null,
+                        replyToJson = null,
+                        senderRole = null,
+                        senderTitle = null,
+                        isDeleted = false
+                    )
+                    messageRepository.insertMessage(messageEntity)
+                    chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000)
+                    loadMessagesInternal()
+                }
+            } else {
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "上传失败", Toast.LENGTH_SHORT).show() }
+            }
+        }
     }
 
     private fun setReplyBanner(message: MessageEntity) {

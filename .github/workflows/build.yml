@@ -75,20 +75,16 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
           echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
 
-      # 一次性发送 APK 文件并附带 caption（不获取消息 ID，下载链接指向频道主页）
       - name: Send APK to Telegram
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-          CAPTION="版本: ${VERSION}
-          提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>
-          <blockquote>${COMMIT_MSG}</blockquote>
-          触发者: ${ACTOR}
-          下载: <a href=\"https://t.me/Botgram_Channel/49\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
-          curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
-            -F "chat_id=${CHAT_ID}" \
-            -F "document=@${APK_PATH}" \
-            -F "caption=${CAPTION}" \
-            -F "parse_mode=HTML"
+  env:
+    BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+  run: |
+    APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
+    # 使用 printf 构建 caption，保留换行符
+    printf -v CAPTION "版本: ${VERSION}\n提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>\n<blockquote>${COMMIT_MSG}</blockquote>\n触发者: ${ACTOR}\n下载: <a href=\"https://t.me/Botgram_Channel/49\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+    curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+      -F "chat_id=${CHAT_ID}" \
+      -F "document=@${APK_PATH}" \
+      -F "caption=${CAPTION}" \
+      -F "parse_mode=HTML"

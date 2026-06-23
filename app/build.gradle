@@ -7,11 +7,6 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
-    // 动态 AAPT2 路径：仅在本地 Termux（非 CI）生效
-    if (System.getenv('CI') == null) {
-        aapt2FromMavenOverride "/data/data/com.termux/files/usr/bin/aapt2"
-    }
-
     signingConfigs {
         release {
             storeFile file("../release.keystore")
@@ -26,7 +21,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 5
-        versionName "0.0.5-c"
+        versionName "0.0.5-c2"
 
         def now = System.currentTimeMillis()
         def date = new Date(now).format('yyyy-MM-dd')
