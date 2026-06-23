@@ -24,9 +24,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 改为构建 Debug APK（自动使用调试签名，无需额外配置）
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build release APK (debug signed)
+        run: ./gradlew assembleRelease
 
       - name: Get version name
         id: get_version
@@ -44,12 +43,11 @@ jobs:
       - name: Get actor
         run: echo "ACTOR=${{ github.actor }}" >> $GITHUB_ENV
 
-      # 注意：Debug APK 输出目录为 app/build/outputs/apk/debug/
       - name: Rename APK
         run: |
-          APK_ORIGINAL=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
-          NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}-debug.apk"
-          mv "$APK_ORIGINAL" "app/build/outputs/apk/debug/$NEW_NAME"
+          APK_ORIGINAL=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}-release.apk"
+          mv "$APK_ORIGINAL" "app/build/outputs/apk/release/$NEW_NAME"
           echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
 
       - name: Create Release and upload APK
@@ -65,7 +63,7 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
           upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
-          APK_PATH="app/build/outputs/apk/debug/${APK_NAME}"
+          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Content-Type: application/zip" \
@@ -74,21 +72,19 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
           echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
 
-      # 发送文件（不带caption），获取消息ID
       - name: Send APK to Telegram (get message ID)
         id: send_apk
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          APK_PATH="app/build/outputs/apk/debug/${APK_NAME}"
+          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           response=$(curl -s -F "chat_id=${CHAT_ID}" \
                -F "document=@${APK_PATH}" \
                https://api.telegram.org/bot${BOT_TOKEN}/sendDocument)
           MESSAGE_ID=$(echo "$response" | jq -r '.result.message_id')
           echo "MESSAGE_ID=$MESSAGE_ID" >> $GITHUB_ENV
 
-      # 编辑caption（只有提交信息使用引用格式）
       - name: Edit caption with download links
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

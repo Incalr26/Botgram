@@ -7,17 +7,23 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
+    // 动态 AAPT2 路径：仅在本地 Termux（非 CI）环境生效
+    if (System.getenv('CI') == null) {
+        aapt2FromMavenOverride = "/data/data/com.termux/files/usr/bin/aapt2"
+    }
+
     def buildTimeMillis = System.currentTimeMillis()
     def buildDate = new Date(buildTimeMillis).format('yyyy-MM-dd')
 
-    signingConfigs {
-        release {
-            storeFile file("${System.properties['user.home']}/botgram-release.jks")
-            storePassword project.findProperty('RELEASE_STORE_PASSWORD')
-            keyAlias "botgram"
-            keyPassword project.findProperty('RELEASE_KEY_PASSWORD')
-        }
-    }
+    // 不再使用自定义签名，注释掉 signingConfigs
+    // signingConfigs {
+    //     release {
+    //         storeFile file("${System.properties['user.home']}/botgram-release.jks")
+    //         storePassword project.findProperty('RELEASE_STORE_PASSWORD')
+    //         keyAlias "botgram"
+    //         keyPassword project.findProperty('RELEASE_KEY_PASSWORD')
+    //     }
+    // }
 
     defaultConfig {
         applicationId "com.incalr26.botgram"
@@ -32,7 +38,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug   // 改用调试签名
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
