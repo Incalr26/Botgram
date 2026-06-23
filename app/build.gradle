@@ -7,15 +7,10 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
-    // 动态 AAPT2 路径：仅在本地 Termux（非 CI）环境生效
-    if (System.getenv('CI') == null) {
-        aapt2FromMavenOverride = "/data/data/com.termux/files/usr/bin/aapt2"
-    }
-
     def buildTimeMillis = System.currentTimeMillis()
     def buildDate = new Date(buildTimeMillis).format('yyyy-MM-dd')
 
-    // 不再使用自定义签名，注释掉 signingConfigs
+    // 暂不使用自定义签名，已注释
     // signingConfigs {
     //     release {
     //         storeFile file("${System.properties['user.home']}/botgram-release.jks")
@@ -30,7 +25,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 4
-        versionName "0.0.4-g3"
+        versionName "0.0.4-g3test"
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
         buildConfigField "long", "BUILD_TIME_MILLIS", "${buildTimeMillis}L"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -38,7 +33,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig signingConfigs.debug   // 改用调试签名
+            signingConfig signingConfigs.debug   // 使用调试签名
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

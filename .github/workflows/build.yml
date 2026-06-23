@@ -1,4 +1,5 @@
-name: Build and Release APK
+- name: Build release APK (debug signed)
+  run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
 
 on:
   push:
