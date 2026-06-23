@@ -7,36 +7,43 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
-    // 本地 Termux AAPT2 路径
+    // 动态 AAPT2 路径：仅在本地 Termux（非 CI）生效
     if (System.getenv('CI') == null) {
         aapt2FromMavenOverride "/data/data/com.termux/files/usr/bin/aapt2"
     }
 
+    // 正式签名配置（使用环境变量或 gradle.properties）
     signingConfigs {
         release {
             storeFile file("../release.keystore")
             storePassword System.getenv("RELEASE_STORE_PASSWORD") ?: project.findProperty("RELEASE_STORE_PASSWORD")
-            keyAlias "second"
+            keyAlias "your_alias"   // 请替换为实际别名
             keyPassword System.getenv("RELEASE_KEY_PASSWORD") ?: project.findProperty("RELEASE_KEY_PASSWORD")
         }
     }
 
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release   // 使用正式签名
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
     defaultConfig {
         applicationId "com.incalr26.botgram"
         minSdk 24
         targetSdk 34
-        versionCode 4
+        versionCode 5
         versionName "0.0.5-a"
-        buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
-        buildConfigField "long", "BUILD_TIME_MILLIS", "${buildTimeMillis}L"
+
+        // 直接内联计算，避免变量传递问题
+        def now = System.currentTimeMillis()
+        def date = new Date(now).format('yyyy-MM-dd')
+        buildConfigField "String", "BUILD_DATE", "\"${date}\""
+        buildConfigField "long", "BUILD_TIME_MILLIS", "${now}L"
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
     }
 
     buildFeatures {

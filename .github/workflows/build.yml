@@ -93,7 +93,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          CAPTION="版本: ${VERSION}
+          CAPTION="版本: v${VERSION}
           提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
           <blockquote>${COMMIT_MSG}</blockquote>
           触发者: ${ACTOR}
