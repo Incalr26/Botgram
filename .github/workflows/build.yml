@@ -96,7 +96,7 @@ jobs:
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           # 使用 HTML 解析，提交信息用 <blockquote> 标签
-          CAPTION="版本: v${VERSION}
+          CAPTION="版本: ${VERSION}
 提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
 <blockquote>${COMMIT_MSG}</blockquote>
 触发者: ${ACTOR}
