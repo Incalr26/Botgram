@@ -81,9 +81,8 @@ jobs:
     CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
   run: |
     APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-    # 使用 <br> 替代换行，确保在 Telegram HTML 中换行生效
     COMMIT_MSG_BR="${COMMIT_MSG//$'\n'/<br>}"
-    CAPTION="版本: ${VERSION}<br>提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a><br><blockquote>${COMMIT_MSG_BR}</blockquote><br>触发者: ${ACTOR}<br>下载: <a href=\"https://t.me/Botgram_Channel/50\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+    CAPTION="版本: ${VERSION}<br>提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a><br><blockquote>${COMMIT_MSG_BR}</blockquote><br>触发者: ${ACTOR}<br>下载: <a href=\"https://t.me/Botgram_Channel\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
     curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
       -F "chat_id=${CHAT_ID}" \
       -F "document=@${APK_PATH}" \
