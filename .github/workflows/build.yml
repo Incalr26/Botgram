@@ -24,8 +24,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease
+      # 改为构建 Debug APK（自动使用调试签名，无需额外配置）
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
 
       - name: Get version name
         id: get_version
@@ -43,11 +44,12 @@ jobs:
       - name: Get actor
         run: echo "ACTOR=${{ github.actor }}" >> $GITHUB_ENV
 
+      # 注意：Debug APK 输出目录为 app/build/outputs/apk/debug/
       - name: Rename APK
         run: |
-          APK_ORIGINAL=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          APK_ORIGINAL=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
           NEW_NAME="Botgram-v${VERSION}-${SHORT_SHA}.apk"
-          mv "$APK_ORIGINAL" "app/build/outputs/apk/release/$NEW_NAME"
+          mv "$APK_ORIGINAL" "app/build/outputs/apk/debug/$NEW_NAME"
           echo "APK_NAME=$NEW_NAME" >> $GITHUB_ENV
 
       - name: Create Release and upload APK
@@ -63,7 +65,7 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/releases \
             -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
           upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
-          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
+          APK_PATH="app/build/outputs/apk/debug/${APK_NAME}"
           curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Content-Type: application/zip" \
@@ -79,7 +81,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
+          APK_PATH="app/build/outputs/apk/debug/${APK_NAME}"
           response=$(curl -s -F "chat_id=${CHAT_ID}" \
                -F "document=@${APK_PATH}" \
                https://api.telegram.org/bot${BOT_TOKEN}/sendDocument)
@@ -92,15 +94,11 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # 构建caption：其他行正常，提交信息行以 ">" 开头（引用）
-          # 注意：Telegram的Markdown中，"> "表示引用块
           CAPTION="版本: ${VERSION}
           提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
           >${COMMIT_MSG}
           触发者: ${ACTOR}
           下载: [Botgram_Channel](https://t.me/Botgram_Channel/${MESSAGE_ID}) | [Github](${RELEASE_URL})"
-          # 将CAPTION中的换行和空格处理为curl可用的格式（保留换行）
-          # 使用 --data-urlencode 避免特殊字符问题
           curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption" \
                -d "chat_id=${CHAT_ID}" \
                -d "message_id=${MESSAGE_ID}" \
