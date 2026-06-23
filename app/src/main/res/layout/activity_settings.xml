@@ -125,7 +125,7 @@
                             android:layout_width="0dp"
                             android:layout_weight="1"
                             android:layout_height="wrap_content"
-                            android:hint="保存路径">
+                            android:hint="媒体保存路径">
                             
                             <com.google.android.material.textfield.TextInputEditText
                                 android:id="@+id/pathEditText"

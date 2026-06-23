@@ -7,24 +7,27 @@ android {
     namespace 'com.incalr26.botgram'
     compileSdk 34
 
-    // 仅在本地 Termux（非 CI）环境设置 AAPT2 路径
+    // 本地 Termux AAPT2 路径
     if (System.getenv('CI') == null) {
         aapt2FromMavenOverride "/data/data/com.termux/files/usr/bin/aapt2"
     }
 
-    def buildTimeMillis = System.currentTimeMillis()
-    def buildDate = new Date(buildTimeMillis).format('yyyy-MM-dd')
+    signingConfigs {
+        release {
+            storeFile file("../release.keystore")
+            storePassword System.getenv("RELEASE_STORE_PASSWORD") ?: project.findProperty("RELEASE_STORE_PASSWORD")
+            keyAlias "second"
+            keyPassword System.getenv("RELEASE_KEY_PASSWORD") ?: project.findProperty("RELEASE_KEY_PASSWORD")
+        }
+    }
 
-    // 暂不使用自定义签名，已注释
-    // signingConfigs {
-    //     release {
-    //         storeFile file("${System.properties['user.home']}/botgram-release.jks")
-    //         storePassword project.findProperty('RELEASE_STORE_PASSWORD')
-    //         keyAlias "botgram"
-    //         keyPassword project.findProperty('RELEASE_KEY_PASSWORD')
-    //     }
-    // }
-
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release   // 使用正式签名
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
     defaultConfig {
         applicationId "com.incalr26.botgram"
         minSdk 24
@@ -34,14 +37,6 @@ android {
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
         buildConfigField "long", "BUILD_TIME_MILLIS", "${buildTimeMillis}L"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    buildTypes {
-        release {
-            signingConfig signingConfigs.debug   // 使用调试签名
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
     }
 
     buildFeatures {

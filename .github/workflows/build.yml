@@ -21,7 +21,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build release APK (debug signed)
+      # 解码正式签名密钥库（从 Secrets 读取 Base64）
+      - name: Decode release keystore
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+      # 构建正式签名的 Release APK
+      - name: Build signed release APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease -Dandroid.aapt2FromMavenOverride=
 
       - name: Get version name
@@ -87,13 +95,14 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          CAPTION="版本: ${VERSION}
-          提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
-          >${COMMIT_MSG}
-          触发者: ${ACTOR}
-          下载: [Botgram_Channel](https://t.me/Botgram_Channel/${MESSAGE_ID}) | [Github](${RELEASE_URL})"
+          # 使用 HTML 解析，提交信息用 <blockquote> 标签
+          CAPTION="版本: v${VERSION}
+提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
+<blockquote>${COMMIT_MSG}</blockquote>
+触发者: ${ACTOR}
+下载: [Botgram_Channel](https://t.me/Botgram_Channel/${MESSAGE_ID}) | [Github](${RELEASE_URL})"
           curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption" \
                -d "chat_id=${CHAT_ID}" \
                -d "message_id=${MESSAGE_ID}" \
                --data-urlencode "caption=${CAPTION}" \
-               -d "parse_mode=Markdown"
+               -d "parse_mode=HTML"

@@ -110,7 +110,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.clearCacheLayout).setOnClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle("清除缓存")
-                .setMessage("这将会清理本地已下载的图片和贴纸缓存文件，确认要继续吗？")
+                .setMessage("这将会清理本地已缓存的图片和贴纸缓存文件，确认要继续吗？")
                 .setPositiveButton("清除") { _, _ ->
                     prefs.edit().remove("unlocked_media").apply()
                     CoroutineScope(Dispatchers.IO).launch {
