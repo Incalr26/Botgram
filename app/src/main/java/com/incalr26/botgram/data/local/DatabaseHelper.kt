@@ -8,7 +8,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "botgram.db"
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 5
 
         const val TABLE_CHATS = "chats"
         const val TABLE_MESSAGES = "messages"
@@ -36,6 +36,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_REPLY_TO_JSON = "replyToJson"
         const val COL_SENDER_ROLE = "senderRole"
         const val COL_SENDER_TITLE = "senderTitle"
+        const val COL_IS_DELETED = "isDeleted"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -69,6 +70,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_REPLY_TO_JSON TEXT,
                 $COL_SENDER_ROLE TEXT,
                 $COL_SENDER_TITLE TEXT,
+                $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY ($COL_MESSAGE_ID, $COL_CHAT_ID)
             )
         """.trimIndent()
@@ -90,6 +92,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_REPLY_TO_JSON TEXT")
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_ROLE TEXT")
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_TITLE TEXT")
+        }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0")
         }
     }
 }

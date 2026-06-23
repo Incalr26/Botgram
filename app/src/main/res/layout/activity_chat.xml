@@ -63,16 +63,20 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:background="?attr/colorSurfaceVariant"
         android:gravity="center_vertical">
 
         <ImageButton
             android:id="@+id/attachButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_attach"
-            android:contentDescription="附件"
-            android:enabled="false"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_add"
+            app:tint="?attr/colorOnSurfaceVariant"
+            android:contentDescription="发送附件"
             android:background="?attr/selectableItemBackgroundBorderless" />
 
         <EditText
@@ -81,17 +85,22 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
-            android:hint="输入消息..." />
+            android:layout_marginEnd="8dp"
+            android:background="@android:color/transparent"
+            android:maxLines="5"
+            android:hint="输入消息..."
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant" />
 
         <ImageButton
             android:id="@+id/sendButton"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:src="@drawable/ic_send"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@android:drawable/ic_menu_send"
+            app:tint="?attr/colorPrimary"
+            android:alpha="0.4"
             android:contentDescription="发送"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:scaleType="centerInside"
-            android:padding="0dp" />
+            android:scaleType="centerInside" />
     </LinearLayout>
 </LinearLayout>

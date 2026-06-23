@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 
 class MessageRepository(private val dbHelper: DatabaseHelper) {
 
-    /** 获取指定会话的所有消息（按时间升序） */
     suspend fun getMessages(chatId: Long): List<MessageEntity> = withContext(Dispatchers.IO) {
         val db = dbHelper.readableDatabase
         val cursor = db.query(
@@ -30,14 +29,14 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
                 entities = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_ENTITIES)),
                 replyToJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REPLY_TO_JSON)),
                 senderRole = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_ROLE)),
-                senderTitle = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_TITLE))
+                senderTitle = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_TITLE)),
+                isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_DELETED)) == 1
             ))
         }
         cursor.close()
         messages
     }
 
-    /** 插入一条消息 */
     suspend fun insertMessage(message: MessageEntity) = withContext(Dispatchers.IO) {
         val db = dbHelper.writableDatabase
         val values = ContentValues().apply {
@@ -53,7 +52,18 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
             put(DatabaseHelper.COL_REPLY_TO_JSON, message.replyToJson)
             put(DatabaseHelper.COL_SENDER_ROLE, message.senderRole)
             put(DatabaseHelper.COL_SENDER_TITLE, message.senderTitle)
+            put(DatabaseHelper.COL_IS_DELETED, if (message.isDeleted) 1 else 0)
         }
         db.insertWithOnConflict(DatabaseHelper.TABLE_MESSAGES, null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    suspend fun markMessageAsDeleted(messageId: Long, chatId: Long) = withContext(Dispatchers.IO) {
+        val db = dbHelper.writableDatabase
+        val values = ContentValues().apply { put(DatabaseHelper.COL_IS_DELETED, 1) }
+        db.update(
+            DatabaseHelper.TABLE_MESSAGES, values,
+            "${DatabaseHelper.COL_MESSAGE_ID} = ? AND ${DatabaseHelper.COL_CHAT_ID} = ?",
+            arrayOf(messageId.toString(), chatId.toString())
+        )
     }
 }

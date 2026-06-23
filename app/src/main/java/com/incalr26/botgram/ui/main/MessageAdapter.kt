@@ -2,12 +2,16 @@ package com.incalr26.botgram.ui.main
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.text.Spannable
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.style.ClickableSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import android.text.style.URLSpan
 import android.view.LayoutInflater
 import android.view.View
@@ -92,7 +96,6 @@ class MessageAdapter(
         holder.boundMessageId = currentMsgId
         val ctx = holder.itemView.context
 
-        // 清除幽灵回调：向复用 ImageView 派发空任务中断底层残留请求
         val clearReq = ImageRequest.Builder(ctx).data(null).target(holder.mediaImage).build()
         Coil.imageLoader(ctx).enqueue(clearReq)
         holder.mediaImage.setImageDrawable(null)
@@ -256,18 +259,27 @@ class MessageAdapter(
             }
         }
 
-        if (actualText.isEmpty()) {
+        if (actualText.isEmpty() && !message.isDeleted) {
             holder.messageText.visibility = View.GONE
         } else {
             holder.messageText.visibility = View.VISIBLE
-            val formatted = MessageFormatter.format(actualText, message.entities)
-            val spannable = if (formatted is Spannable) formatted else SpannableString(formatted ?: "")
-            val urlSpans = spannable.getSpans(0, spannable.length, URLSpan::class.java)
+            val baseFormatted = MessageFormatter.format(actualText, message.entities)
+            val builder = SpannableStringBuilder(baseFormatted ?: "")
+
+            if (message.isDeleted) {
+                val deleteTag = " [已撤回]"
+                val start = builder.length
+                builder.append(deleteTag)
+                builder.setSpan(ForegroundColorSpan(Color.parseColor("#D32F2F")), start, start + deleteTag.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, start + deleteTag.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+
+            val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
             for (urlSpan in urlSpans) {
-                val start = spannable.getSpanStart(urlSpan)
-                val end = spannable.getSpanEnd(urlSpan)
-                spannable.removeSpan(urlSpan)
-                spannable.setSpan(object : ClickableSpan() {
+                val start = builder.getSpanStart(urlSpan)
+                val end = builder.getSpanEnd(urlSpan)
+                builder.removeSpan(urlSpan)
+                builder.setSpan(object : ClickableSpan() {
                     override fun onClick(widget: View) {
                         MaterialAlertDialogBuilder(ctx)
                             .setTitle("打开链接")
@@ -278,7 +290,7 @@ class MessageAdapter(
                     override fun updateDrawState(ds: TextPaint) { super.updateDrawState(ds); ds.isUnderlineText = true }
                 }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-            holder.messageText.text = spannable
+            holder.messageText.text = builder
             holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
         }
 
@@ -313,8 +325,11 @@ class MessageAdapter(
             }
         }
 
+        // 禁止撤回的消息弹出编辑长按菜单
         holder.itemView.setOnClickListener { onClick?.invoke(message) }
-        holder.itemView.setOnLongClickListener { view -> onLongClick?.invoke(message, view) ?: false }
+        holder.itemView.setOnLongClickListener { view -> 
+            if (message.isDeleted) true else onLongClick?.invoke(message, view) ?: false 
+        }
     }
 
     class DiffCallback : DiffUtil.ItemCallback<MessageEntity>() {

@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MenuItem
@@ -21,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.incalr26.botgram.BotApp
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
@@ -91,7 +94,21 @@ class ChatActivity : AppCompatActivity() {
 
             val messageInput = findViewById<EditText>(R.id.messageInput)
             val sendButton = findViewById<ImageButton>(R.id.sendButton)
+            val attachButton = findViewById<ImageButton>(R.id.attachButton)
             val replyBanner = findViewById<LinearLayout>(R.id.replyBanner)
+
+            messageInput.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    val hasText = s?.toString()?.trim()?.isNotEmpty() == true
+                    sendButton.alpha = if (hasText) 1.0f else 0.4f
+                    sendButton.isEnabled = hasText
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+            sendButton.isEnabled = false // 初始禁用
+
+            attachButton.setOnClickListener { showAttachMenu() }
 
             findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
                 replyToMessageId = null
@@ -119,6 +136,45 @@ class ChatActivity : AppCompatActivity() {
             }
 
         } catch (e: Exception) { gotoCrash(e) }
+    }
+
+    private fun showAttachMenu() {
+        val bottomSheetDialog = BottomSheetDialog(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 32, 0, 32)
+        }
+
+        val items = listOf(
+            Pair("图片 (相册)", android.R.drawable.ic_menu_gallery),
+            Pair("视频", android.R.drawable.presence_video_online),
+            Pair("文件", android.R.drawable.ic_menu_agenda)
+        )
+
+        items.forEach { (title, iconRes) ->
+            val layout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(48, 36, 48, 36)
+                background = ContextCompat.getDrawable(this@ChatActivity, androidx.appcompat.R.drawable.abc_item_background_holo_light)
+                gravity = Gravity.CENTER_VERTICAL
+                setOnClickListener {
+                    Toast.makeText(this@ChatActivity, "底层文件选择与分发接口开发中...", Toast.LENGTH_SHORT).show()
+                    bottomSheetDialog.dismiss()
+                }
+            }
+            val icon = ImageView(this).apply { setImageResource(iconRes) }
+            val text = TextView(this).apply {
+                this.text = title
+                textSize = 16f
+                setPadding(32, 0, 0, 0)
+            }
+            layout.addView(icon)
+            layout.addView(text)
+            container.addView(layout)
+        }
+        
+        bottomSheetDialog.setContentView(container)
+        bottomSheetDialog.show()
     }
 
     private fun setReplyBanner(message: MessageEntity) {
@@ -346,7 +402,8 @@ class ChatActivity : AppCompatActivity() {
                         entities = null,
                         replyToJson = null,
                         senderRole = null,
-                        senderTitle = null
+                        senderTitle = null,
+                        isDeleted = false
                     )
                     messageRepository.insertMessage(messageEntity)
                     chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000)
@@ -362,8 +419,16 @@ class ChatActivity : AppCompatActivity() {
         try {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return
             val res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/deleteMessage?chat_id=$chatId&message_id=$messageId").build()).execute()
-            withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, if (res.isSuccessful) "已撤回" else "撤回失败", Toast.LENGTH_SHORT).show(); loadMessagesInternal() }
-        } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回失败", Toast.LENGTH_SHORT).show() } }
+            if (res.isSuccessful) {
+                messageRepository.markMessageAsDeleted(messageId, chatId)
+                withContext(Dispatchers.Main) { 
+                    Toast.makeText(this@ChatActivity, "已撤回", Toast.LENGTH_SHORT).show()
+                    loadMessagesInternal()
+                }
+            } else {
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回失败", Toast.LENGTH_SHORT).show() }
+            }
+        } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回异常: ${e.message}", Toast.LENGTH_SHORT).show() } }
     }
 
     private fun sendTextMessage(text: String, replyTo: Long?) {
@@ -395,7 +460,8 @@ class ChatActivity : AppCompatActivity() {
                         entities = null,
                         replyToJson = replyToJson,
                         senderRole = null,
-                        senderTitle = null
+                        senderTitle = null,
+                        isDeleted = false
                     )
                     messageRepository.insertMessage(messageEntity)
                     chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000)

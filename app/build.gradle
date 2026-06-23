@@ -12,12 +12,11 @@ android {
         aapt2FromMavenOverride "/data/data/com.termux/files/usr/bin/aapt2"
     }
 
-    // 正式签名配置（使用环境变量或 gradle.properties）
     signingConfigs {
         release {
             storeFile file("../release.keystore")
             storePassword System.getenv("RELEASE_STORE_PASSWORD") ?: project.findProperty("RELEASE_STORE_PASSWORD")
-            keyAlias "your_alias"   // 请替换为实际别名
+            keyAlias "second"
             keyPassword System.getenv("RELEASE_KEY_PASSWORD") ?: project.findProperty("RELEASE_KEY_PASSWORD")
         }
     }
@@ -27,9 +26,8 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 5
-        versionName "0.0.5-a"
+        versionName "0.0.5-b"
 
-        // 直接内联计算，避免变量传递问题
         def now = System.currentTimeMillis()
         def date = new Date(now).format('yyyy-MM-dd')
         buildConfigField "String", "BUILD_DATE", "\"${date}\""

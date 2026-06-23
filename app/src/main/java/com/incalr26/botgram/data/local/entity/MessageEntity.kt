@@ -11,6 +11,7 @@ data class MessageEntity(
     val rawJson: String? = null,
     val entities: String? = null,
     val replyToJson: String? = null,
-    val senderRole: String? = null,   // 身份：creator/administrator/member
-    val senderTitle: String? = null   // 自定义标签
+    val senderRole: String? = null,
+    val senderTitle: String? = null,
+    val isDeleted: Boolean = false
 )
