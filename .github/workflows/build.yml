@@ -75,31 +75,20 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/$TAG"
           echo "RELEASE_URL=$RELEASE_URL" >> $GITHUB_ENV
 
-      - name: Send APK to Telegram (get message ID)
-        id: send_apk
+      # 一次性发送 APK 文件并附带 caption（不获取消息 ID，下载链接指向频道主页）
+      - name: Send APK to Telegram
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-          response=$(curl -s -F "chat_id=${CHAT_ID}" \
-            -F "document=@${APK_PATH}" \
-            https://api.telegram.org/bot${BOT_TOKEN}/sendDocument)
-          MESSAGE_ID=$(echo "$response" | jq -r '.result.message_id')
-          echo "MESSAGE_ID=$MESSAGE_ID" >> $GITHUB_ENV
-
-      - name: Edit caption with download links
-        env:
-          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          CAPTION="版本: v${VERSION}
-          提交: [${SHORT_SHA}](https://github.com/${{ github.repository }}/commit/${SHORT_SHA})
+          CAPTION="版本: ${VERSION}
+          提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>
           <blockquote>${COMMIT_MSG}</blockquote>
           触发者: ${ACTOR}
-          下载: [Botgram_Channel](https://t.me/Botgram_Channel/${MESSAGE_ID}) | [Github](${RELEASE_URL})"
-          curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/editMessageCaption" \
-            -d "chat_id=${CHAT_ID}" \
-            -d "message_id=${MESSAGE_ID}" \
-            --data-urlencode "caption=${CAPTION}" \
-            -d "parse_mode=HTML"
+          下载: <a href=\"https://t.me/Botgram_Channel/49\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+          curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${CHAT_ID}" \
+            -F "document=@${APK_PATH}" \
+            -F "caption=${CAPTION}" \
+            -F "parse_mode=HTML"
