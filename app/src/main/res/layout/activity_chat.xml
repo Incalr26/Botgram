@@ -19,7 +19,8 @@
         android:background="?attr/colorSurfaceVariant"
         app:elevation="8dp"
         app:title="聊天"
-        app:titleTextColor="?attr/colorOnSurfaceVariant"
+        app:titleTextColor="?attr/colorOnSurface"
+        app:subtitleTextColor="?attr/colorOnSurfaceVariant"
         app:navigationIcon="?attr/homeAsUpIndicator" />
 
     <LinearLayout

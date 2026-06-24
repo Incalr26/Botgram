@@ -45,6 +45,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class ChatActivity : AppCompatActivity() {
     private lateinit var chatRepository: ChatRepository
@@ -55,12 +56,10 @@ class ChatActivity : AppCompatActivity() {
     private var replyToMessageId: Long? = null
     private var chatType: String = "private"
 
-    // 支持多选媒体画廊
     private val pendingUploads = mutableListOf<Pair<Uri, String>>()
 
     private val crashHandler = CoroutineExceptionHandler { _, throwable -> gotoCrash(throwable) }
 
-    // 使用支持多选的原生选择器
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "photo") }
     private val pickVideosLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "video") }
     private val pickFilesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "document") }
@@ -87,6 +86,8 @@ class ChatActivity : AppCompatActivity() {
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            // 强行缩小副标题字号以符合官方规范
+            toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
@@ -134,7 +135,16 @@ class ChatActivity : AppCompatActivity() {
                 override fun afterTextChanged(s: Editable?) {}
             })
 
-            attachButton.setOnClickListener { showAttachMenu(attachButton) }
+            attachButton.setOnClickListener {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                if (imm.isActive(messageInput)) {
+                    // 如果键盘开启，先隐藏键盘，延迟后弹出，防止错位
+                    imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
+                    attachButton.postDelayed({ showAttachMenu(attachButton) }, 250)
+                } else {
+                    showAttachMenu(attachButton)
+                }
+            }
 
             findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
                 replyToMessageId = null
@@ -173,7 +183,6 @@ class ChatActivity : AppCompatActivity() {
     private fun handleMediaSelected(uris: List<Uri>?, type: String) {
         if (uris.isNullOrEmpty()) return
         
-        // 限制互斥：已有文件时不允许混选不同种类的系统媒体
         if (pendingUploads.isNotEmpty() && pendingUploads.first().second != type) {
             Toast.makeText(this, "暂不支持混搭不同类型的媒体发送", Toast.LENGTH_SHORT).show()
             pendingUploads.clear()
@@ -188,7 +197,6 @@ class ChatActivity : AppCompatActivity() {
         sendButton.alpha = 1.0f
     }
 
-    // 动态生成横向正方形画廊预览
     private fun updatePreviewUI() {
         val previewContainer = findViewById<LinearLayout>(R.id.mediaPreviewContainer)
         val previewList = findViewById<LinearLayout>(R.id.previewList)
@@ -229,7 +237,7 @@ class ChatActivity : AppCompatActivity() {
                     "photo" -> setImageURI(uri)
                     "video" -> { setImageResource(android.R.drawable.presence_video_online); setPadding(24, 24, 24, 24) }
                     "audio" -> { setImageResource(android.R.drawable.ic_media_play); setPadding(24, 24, 24, 24) }
-                    else -> { setImageResource(R.drawable.ic_file_document); setPadding(24, 24, 24, 24); setColorFilter(Color.GRAY) }
+                    else -> { setImageResource(R.drawable.ic_menu_agenda); setPadding(24, 24, 24, 24); setColorFilter(Color.GRAY) }
                 }
             }
             card.addView(icon)
@@ -239,7 +247,7 @@ class ChatActivity : AppCompatActivity() {
                     gravity = Gravity.TOP or Gravity.END
                 }
                 setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-                background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.avatar_bg) // 使用圆形黑底
+                background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.avatar_bg)
                 setColorFilter(Color.WHITE)
                 setPadding(8, 8, 8, 8)
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -282,7 +290,7 @@ class ChatActivity : AppCompatActivity() {
             Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
             Triple("发送视频", android.R.drawable.presence_video_online, 2),
             Triple("发送音频", android.R.drawable.ic_media_play, 4),
-            Triple("发送文件", R.drawable.ic_file_document, 3)
+            Triple("发送文件", R.drawable.ic_menu_agenda, 3)
         )
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -333,6 +341,13 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             
+            // 为上传专属克隆高超时限制的 OkHttp Client
+            val uploadClient = ApiClient.getClient().newBuilder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(120, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .build()
+
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first()
                 val type = item.second
@@ -354,7 +369,7 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 val req = Request.Builder().url("https://api.telegram.org/bot$token/$apiMethod").post(requestBodyBuilder.build()).build()
-                val res = ApiClient.getClient().newCall(req).execute()
+                val res = uploadClient.newCall(req).execute()
                 file.delete()
 
                 if (res.isSuccessful) {
@@ -391,7 +406,7 @@ class ChatActivity : AppCompatActivity() {
                 
                 builder.addFormDataPart("media", mediaArray.toString())
                 val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMediaGroup").post(builder.build()).build()
-                val res = ApiClient.getClient().newCall(req).execute()
+                val res = uploadClient.newCall(req).execute()
                 
                 tempFiles.forEach { it.delete() }
 
@@ -431,7 +446,6 @@ class ChatActivity : AppCompatActivity() {
         loadMessagesInternal()
     }
 
-    // 补回了这个非常重要的方法，彻底修复 Unresolved reference 编译报错！
     private fun setReplyBanner(message: MessageEntity) {
         val banner = findViewById<LinearLayout>(R.id.replyBanner)
         findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"
@@ -461,7 +475,7 @@ class ChatActivity : AppCompatActivity() {
                 chatType = chat.type
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
                 val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
-                supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) " · ${memberCount}人" else "")
+                supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) " · $memberCount 位成员" else "")
             }
         }
     }
@@ -504,7 +518,7 @@ class ChatActivity : AppCompatActivity() {
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio")) {
-            items.add(0, Triple("保存", R.drawable.ic_save_media, 8))
+            items.add(0, Triple("保存", R.drawable.ic_menu_save, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
