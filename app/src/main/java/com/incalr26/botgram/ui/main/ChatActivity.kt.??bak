@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -31,7 +32,12 @@ import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.data.repository.ChatRepository
 import com.incalr26.botgram.data.repository.MessageRepository
 import kotlinx.coroutines.*
+import okhttp3.MultipartBody
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ChatActivity : AppCompatActivity() {
@@ -156,15 +162,10 @@ class ChatActivity : AppCompatActivity() {
         } catch (e: Exception) { gotoCrash(e) }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        onBackPressedDispatcher.onBackPressed()
-        return true
-    }
-
     private fun handleMediaSelected(uris: List<Uri>?, type: String) {
         if (uris.isNullOrEmpty()) return
         if (pendingUploads.isNotEmpty() && pendingUploads.first().second != type) {
-            Toast.makeText(this, "暂不支持混搭不同类型的媒体发送", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "暂不支持混搭不同类型的媒体", Toast.LENGTH_SHORT).show()
             pendingUploads.clear()
         }
         uris.forEach { pendingUploads.add(Pair(it, type)) }
@@ -213,8 +214,6 @@ class ChatActivity : AppCompatActivity() {
             elevation = 16f * resources.displayMetrics.density
             clipToOutline = true
         }
-        
-        // 获取 Material You 主题色
         val typedValue = TypedValue()
         theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, typedValue, true)
         val textColor = typedValue.data
@@ -230,7 +229,6 @@ class ChatActivity : AppCompatActivity() {
 
         items.forEach { (title, iconRes, action) ->
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            // 确保图标使用 PrimaryColor 染色，匹配 Material You 风格
             itemView.findViewById<ImageView>(R.id.menu_icon).apply { setImageResource(iconRes); setColorFilter(primaryColor) }
             itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(textColor) }
             itemView.setOnClickListener { popupWindow.dismiss(); when (action) { 1 -> pickImagesLauncher.launch("image/*"); 2 -> pickVideosLauncher.launch("video/*"); 3 -> pickFilesLauncher.launch("*/*") } }
@@ -242,7 +240,25 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun uploadMediaAndSend(caption: String) {
-        // 保留原上传逻辑，无需改动
+        val uploads = pendingUploads.toList()
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+            val client = ApiClient.getClient().newBuilder().connectTimeout(30, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
+            
+            uploads.forEach { (uri, type) ->
+                val file = File(cacheDir, "temp_upload_${System.currentTimeMillis()}")
+                contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+                
+                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart("chat_id", chatId.toString())
+                    .addFormDataPart(if (type == "photo") "photo" else "document", file.name, file.asRequestBody("*/*".toMediaTypeOrNull()))
+                if (caption.isNotEmpty()) builder.addFormDataPart("caption", caption)
+                
+                val url = "https://api.telegram.org/bot$token/send${type.replaceFirstChar { it.uppercase() }}"
+                val request = Request.Builder().url(url).post(builder.build()).build()
+                client.newCall(request).execute()
+            }
+        }
     }
 
     private suspend fun loadTitleAndType() {
@@ -250,7 +266,7 @@ class ChatActivity : AppCompatActivity() {
         var memberCount: Int? = null
         try {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
-            val countReq = okhttp3.Request.Builder().url("https://api.telegram.org/bot$token/getChatMemberCount?chat_id=$chatId").build()
+            val countReq = Request.Builder().url("https://api.telegram.org/bot$token/getChatMemberCount?chat_id=$chatId").build()
             val countRes = ApiClient.getClient().newCall(countReq).execute()
             if (countRes.isSuccessful) { val json = JSONObject(countRes.body?.string() ?: ""); if (json.getBoolean("ok")) memberCount = json.getInt("result") }
         } catch (_: Exception) {}
@@ -259,14 +275,40 @@ class ChatActivity : AppCompatActivity() {
             chatType = chat.type
             supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
             val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
-            // 是空格分隔，成员数后面拼接"位成员"
             supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) " $memberCount 位成员" else "")
         }
     }
-    
-    private fun showMessageMenu(m: MessageEntity, a: View) { /*  */ }
-    private fun sendTextMessage(t: String, r: Long?) { /*  */ }
+
+    private fun showMessageMenu(message: MessageEntity, anchor: View) {
+        val items = arrayOf("回复", "复制文本", "保存媒体")
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setItems(items) { _, which ->
+                when(which) {
+                    0 -> { replyToMessageId = message.messageId; findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE; findViewById<TextView>(R.id.replyText).text = "回复: ${message.text?.take(20)}" }
+                    1 -> { val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager; cm.setPrimaryClip(android.content.ClipData.newPlainText("text", message.text)); Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show() }
+                    2 -> { Toast.makeText(this, "保存功能已调用", Toast.LENGTH_SHORT).show() }
+                }
+            }.show()
+    }
+
+    private fun sendTextMessage(text: String, replyId: Long?) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
+            var url = "https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=${java.net.URLEncoder.encode(text, "UTF-8")}"
+            if (replyId != null) url += "&reply_to_message_id=$replyId"
+            ApiClient.getClient().newCall(Request.Builder().url(url).build()).execute()
+        }
+    }
+
+    private suspend fun loadMessagesInternal() {
+        val msgs = messageRepository.getMessages(chatId)
+        withContext(Dispatchers.Main) { adapter.submitList(msgs) }
+    }
+
     private fun getStatusBarHeight(): Int { val res = resources.getIdentifier("status_bar_height", "dimen", "android"); return if (res > 0) resources.getDimensionPixelSize(res) else 0 }
-    private fun gotoCrash(e: Throwable) { /*  */ }
-    private suspend fun loadMessagesInternal() { /* */ }
+    
+    private fun gotoCrash(e: Throwable) {
+        Log.e("ChatActivity", "Crash", e)
+        finish()
+    }
 }
