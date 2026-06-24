@@ -70,11 +70,12 @@ class MessageAdapter(
 
         val mediaContainer: MaterialCardView = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
-        val mediaOverlay: LinearLayout = view.findViewById(R.id.mediaOverlay)
+        val mediaOverlay: View = view.findViewById(R.id.mediaOverlay)
         val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
         val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
         
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
+        val fileIcon: ImageView = view.findViewById(R.id.fileIcon)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
         
@@ -204,13 +205,16 @@ class MessageAdapter(
             holder.mediaOverlaySize.text = formatSize(fileSize)
             holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else android.R.drawable.stat_sys_download)
             
-            val isUnlocked = unlockedSet.contains(currentMsgId.toString())
+            // 核心修复：你自己发的信息强行免除黑屏缓存限制
+            val isUnlocked = isOutgoing || unlockedSet.contains(currentMsgId.toString())
             holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
             val loadMedia = {
                 holder.mediaOverlay.visibility = View.GONE
-                unlockedSet.add(currentMsgId.toString())
-                prefs.edit().putStringSet("unlocked_media", unlockedSet).apply()
+                if (!isOutgoing) {
+                    unlockedSet.add(currentMsgId.toString())
+                    prefs.edit().putStringSet("unlocked_media", unlockedSet).apply()
+                }
                 
                 holder.mediaJob = scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
@@ -240,12 +244,20 @@ class MessageAdapter(
                     }
                 }
             }
-        } else if (rawObj.has("document")) {
+        } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
+            val isAudio = rawObj.has("audio") || rawObj.has("voice")
             actualText = rawObj.optString("caption", "")
-            mediaLabel = "[文件] "
+            mediaLabel = if (isAudio) "[音频] " else "[文件] "
             holder.fileContainer.visibility = View.VISIBLE
-            val doc = rawObj.getJSONObject("document")
-            holder.fileNameText.text = doc.optString("file_name", "未知文件")
+            
+            val doc = if (isAudio) {
+                if (rawObj.has("audio")) rawObj.getJSONObject("audio") else rawObj.getJSONObject("voice")
+            } else {
+                rawObj.getJSONObject("document")
+            }
+            
+            holder.fileIcon.setImageResource(if (isAudio) android.R.drawable.ic_media_play else R.drawable.ic_file_document)
+            holder.fileNameText.text = doc.optString("file_name", if (isAudio) "音频消息" else "未知文件")
             holder.fileSizeText.text = formatSize(doc.optLong("file_size", 0L))
             
             holder.fileContainer.setOnClickListener {
@@ -325,7 +337,6 @@ class MessageAdapter(
             }
         }
 
-        // 禁止撤回的消息弹出编辑长按菜单
         holder.itemView.setOnClickListener { onClick?.invoke(message) }
         holder.itemView.setOnLongClickListener { view -> 
             if (message.isDeleted) true else onLongClick?.invoke(message, view) ?: false 
