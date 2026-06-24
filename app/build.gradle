@@ -20,8 +20,8 @@ android {
         applicationId "com.incalr26.botgram"
         minSdk 24
         targetSdk 34
-        versionCode 5
-        versionName "0.0.5-e2"
+        versionCode 6
+        versionName "0.0.6-a"
 
         def now = System.currentTimeMillis()
         def date = new Date(now).format('yyyy-MM-dd')

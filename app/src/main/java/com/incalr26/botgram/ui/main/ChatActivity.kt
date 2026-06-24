@@ -16,6 +16,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.webkit.MimeTypeMap
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -102,6 +103,12 @@ class ChatActivity : AppCompatActivity() {
                     if (imm.isActive && currentFocus != null) imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
                     view.postDelayed({ if (!isFinishing && !isDestroyed) showMessageMenu(message, view) }, 150)
                     true
+                },
+                onAvatarLongClick = { message ->
+                    handleAvatarMention(message)
+                },
+                onFileClick = { message ->
+                    handleFileClick(message)
                 }
             )
 
@@ -189,6 +196,92 @@ class ChatActivity : AppCompatActivity() {
         return true
     }
 
+    private fun handleAvatarMention(message: MessageEntity) {
+        val username = try {
+            JSONObject(message.rawJson ?: "{}").optJSONObject("from")?.optString("username")
+        } catch (e: Exception) { null }
+        
+        val mentionText = if (!username.isNullOrEmpty()) {
+            "@$username "
+        } else {
+            val name = message.senderName ?: "User"
+            "[$name](tg://user?id=${message.senderUserId}) "
+        }
+        
+        val input = findViewById<EditText>(R.id.messageInput)
+        val start = Math.max(input.selectionStart, 0)
+        input.text.insert(start, mentionText)
+        
+        input.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun handleFileClick(message: MessageEntity) {
+        val fileCachePrefs = getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
+        val savedPath = fileCachePrefs.getString(message.messageId.toString(), null)
+
+        if (savedPath != null && File(savedPath).exists()) {
+            openSystemFile(File(savedPath))
+        } else {
+            Toast.makeText(this, "开始下载...", Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+                val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+                val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
+                
+                var fileId = ""
+                var subDir = "Files"
+                var origName = "file_${message.messageId}"
+                
+                if (rawObj.has("document")) {
+                    val doc = rawObj.getJSONObject("document")
+                    fileId = doc.getString("file_id")
+                    origName = doc.optString("file_name", origName)
+                } else if (rawObj.has("audio") || rawObj.has("voice")) {
+                    val isAudio = rawObj.has("audio")
+                    val doc = if (isAudio) rawObj.getJSONObject("audio") else rawObj.getJSONObject("voice")
+                    fileId = doc.getString("file_id")
+                    subDir = "Audio"
+                    origName = doc.optString("file_name", if (isAudio) "audio.mp3" else "voice.ogg")
+                } else return@launch
+
+                val url = FileHelper.getTelegramFileUrl(fileId, token)
+                if (!url.isNullOrEmpty()) {
+                    val savedFile = FileHelper.saveMediaToStorageAndGetFile(this@ChatActivity, url, subDir, origName)
+                    withContext(Dispatchers.Main) {
+                        if (savedFile != null) {
+                            fileCachePrefs.edit().putString(message.messageId.toString(), savedFile.absolutePath).apply()
+                            Toast.makeText(this@ChatActivity, "下载完成，即将打开", Toast.LENGTH_SHORT).show()
+                            openSystemFile(savedFile)
+                        } else {
+                            Toast.makeText(this@ChatActivity, "下载失败，请检查网络或权限", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openSystemFile(file: File) {
+        try {
+            val uri = Uri.parse("file://${file.absolutePath}")
+            val intent = Intent(Intent.ACTION_VIEW)
+            val ext = file.extension.lowercase()
+            val mimeMap = MimeTypeMap.getSingleton()
+            val mime = mimeMap.getMimeTypeFromExtension(ext) ?: "*/*"
+            
+            // 解决 Android 7.0+ Uri 暴露异常，允许直接使用 File Uri 打开
+            android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
+            
+            intent.setDataAndType(uri, mime)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法打开该类型文件", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun handleMediaSelected(uris: List<Uri>?, type: String) {
         if (uris.isNullOrEmpty()) return
         
@@ -254,10 +347,10 @@ class ChatActivity : AppCompatActivity() {
                     else -> {
                         scaleType = ImageView.ScaleType.FIT_CENTER
                         setPadding(24, 24, 24, 24)
-                        setColorFilter(primaryColor)
+                        setColorFilter(primaryColor) 
                         when (type) {
-                            "video" -> setImageResource(android.R.drawable.presence_video_online)
-                            "audio" -> setImageResource(android.R.drawable.ic_media_play)
+                            "video" -> setImageResource(R.drawable.ic_video)
+                            "audio" -> setImageResource(R.drawable.ic_audio)
                             else -> setImageResource(R.drawable.ic_file_document)
                         }
                     }
@@ -309,10 +402,11 @@ class ChatActivity : AppCompatActivity() {
         theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
         val primaryColor = typedValue.data
 
+        // 全面采用新注入的高清不发灰 Material Vector 图标
         val items = listOf(
-            Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
-            Triple("发送视频", android.R.drawable.presence_video_online, 2),
-            Triple("发送音频", android.R.drawable.ic_media_play, 4),
+            Triple("发送图片", R.drawable.ic_image, 1),
+            Triple("发送视频", R.drawable.ic_video, 2),
+            Triple("发送音频", R.drawable.ic_audio, 4),
             Triple("发送文件", R.drawable.ic_file_document, 3)
         )
 
@@ -378,7 +472,7 @@ class ChatActivity : AppCompatActivity() {
                 val mimeType = contentResolver.getType(item.first) ?: "application/octet-stream"
                 val requestBodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
                     .addFormDataPart("chat_id", chatId.toString())
-                    .addFormDataPart(type, file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
+                    .addFormDataPart(if (type == "audio") "document" else type, file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
 
                 if (caption.isNotEmpty()) requestBodyBuilder.addFormDataPart("caption", caption)
                 replyToMessageId?.let { requestBodyBuilder.addFormDataPart("reply_to_message_id", it.toString()) }
@@ -386,7 +480,7 @@ class ChatActivity : AppCompatActivity() {
                 val apiMethod = when(type) {
                     "photo" -> "sendPhoto"
                     "video" -> "sendVideo"
-                    "audio" -> "sendAudio"
+                    "audio" -> "sendDocument"
                     else -> "sendDocument"
                 }
 
@@ -497,7 +591,13 @@ class ChatActivity : AppCompatActivity() {
                 chatType = chat.type
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
                 val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
-                supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                
+                // 完全按照要求：若是私聊，只显示私聊；否则拼接空格和“位成员”
+                if (chat.type == "private") {
+                    supportActionBar?.subtitle = "私聊"
+                } else {
+                    supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                }
             }
         }
     }
@@ -540,7 +640,8 @@ class ChatActivity : AppCompatActivity() {
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio")) {
-            items.add(0, Triple("保存", android.R.drawable.ic_menu_save, 8))
+            // 采用原版安全存在的保存图标
+            items.add(0, Triple("保存", R.drawable.ic_save_media, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -628,9 +729,9 @@ class ChatActivity : AppCompatActivity() {
                 fileId = vid.getString("file_id")
                 subDir = "Videos"
                 fName = vid.optString("file_name", "$fName.mp4")
-            } else if (rawObj.has("document") || rawObj.has("audio")) {
-                val isAudio = rawObj.has("audio")
-                val doc = if (isAudio) rawObj.getJSONObject("audio") else rawObj.getJSONObject("document")
+            } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
+                val isAudio = rawObj.has("audio") || rawObj.has("voice")
+                val doc = if (isAudio) (if (rawObj.has("audio")) rawObj.getJSONObject("audio") else rawObj.getJSONObject("voice")) else rawObj.getJSONObject("document")
                 fileId = doc.getString("file_id")
                 subDir = if (isAudio) "Audio" else "Files"
                 val origName = doc.optString("file_name", "")

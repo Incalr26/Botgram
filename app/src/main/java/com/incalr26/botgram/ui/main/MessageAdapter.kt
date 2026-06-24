@@ -39,7 +39,9 @@ import java.util.*
 
 class MessageAdapter(
     private val onClick: ((MessageEntity) -> Unit)? = null,
-    private val onLongClick: ((MessageEntity, View) -> Boolean)? = null
+    private val onLongClick: ((MessageEntity, View) -> Boolean)? = null,
+    private val onAvatarLongClick: ((MessageEntity) -> Unit)? = null,
+    private val onFileClick: ((MessageEntity) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
     private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
@@ -115,6 +117,16 @@ class MessageAdapter(
             holder.avatarFallback.visibility = View.VISIBLE
             holder.avatar.visibility = View.GONE
             holder.avatar.setImageDrawable(null)
+            
+            // 绑定长按头像进行艾特的事件
+            holder.avatar.setOnLongClickListener {
+                onAvatarLongClick?.invoke(message)
+                true
+            }
+            holder.avatarFallback.setOnLongClickListener {
+                onAvatarLongClick?.invoke(message)
+                true
+            }
         }
 
         val nameBuilder = StringBuilder(message.senderName ?: "未知")
@@ -205,7 +217,6 @@ class MessageAdapter(
             holder.mediaOverlaySize.text = formatSize(fileSize)
             holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else android.R.drawable.stat_sys_download)
             
-            // 核心修复：你自己发的信息强行免除黑屏缓存限制
             val isUnlocked = isOutgoing || unlockedSet.contains(currentMsgId.toString())
             holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
@@ -260,14 +271,9 @@ class MessageAdapter(
             holder.fileNameText.text = doc.optString("file_name", if (isAudio) "音频消息" else "未知文件")
             holder.fileSizeText.text = formatSize(doc.optLong("file_size", 0L))
             
+            // 转发点击事件给 Activity 进行持久化与打开
             holder.fileContainer.setOnClickListener {
-                scope.launch {
-                    val url = FileHelper.getTelegramFileUrl(doc.getString("file_id"), token)
-                    if (!url.isNullOrEmpty()) {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        try { ctx.startActivity(intent) } catch (_: Exception) {}
-                    }
-                }
+                onFileClick?.invoke(message)
             }
         }
 

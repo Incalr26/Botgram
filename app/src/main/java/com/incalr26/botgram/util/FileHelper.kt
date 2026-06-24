@@ -33,21 +33,37 @@ object FileHelper {
         return@withContext null
     }
 
-    suspend fun saveMediaToStorage(context: Context, url: String, subDir: String, fileName: String): Boolean = withContext(Dispatchers.IO) {
+    private fun getUniqueFile(context: Context, subDir: String, originalName: String): File {
+        val prefs = context.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+        val basePath = prefs.getString("media_save_path", "Download/Botgram") ?: "Download/Botgram"
+        
+        var targetDir = File(Environment.getExternalStorageDirectory(), "$basePath/$subDir")
+        if (!targetDir.exists() && !targetDir.mkdirs()) {
+            targetDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Botgram/$subDir")
+            targetDir.mkdirs()
+        }
+        
+        var file = File(targetDir, originalName)
+        if (!file.exists()) return file
+        
+        val nameWithoutExt = file.nameWithoutExtension
+        val ext = file.extension
+        val dotExt = if (ext.isNotEmpty()) ".$ext" else ""
+        
+        var counter = 1
+        while (file.exists()) {
+            file = File(targetDir, "$nameWithoutExt($counter)$dotExt")
+            counter++
+        }
+        return file
+    }
+
+    suspend fun saveMediaToStorageAndGetFile(context: Context, url: String, subDir: String, originalName: String): File? = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder().url(url).build()
             val response = ApiClient.getClient().newCall(request).execute()
             if (response.isSuccessful && response.body != null) {
-                val prefs = context.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
-                val basePath = prefs.getString("media_save_path", "Download/Botgram") ?: "Download/Botgram"
-                
-                var targetDir = File(Environment.getExternalStorageDirectory(), "$basePath/$subDir")
-                if (!targetDir.exists() && !targetDir.mkdirs()) {
-                    targetDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Botgram/$subDir")
-                    targetDir.mkdirs()
-                }
-                
-                val destFile = File(targetDir, fileName)
+                val destFile = getUniqueFile(context, subDir, originalName)
                 val inputStream = response.body!!.byteStream()
                 val outputStream = FileOutputStream(destFile)
                 inputStream.copyTo(outputStream)
@@ -55,15 +71,18 @@ object FileHelper {
                 inputStream.close()
                 
                 MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), null) { _, _ -> }
-                return@withContext true
+                return@withContext destFile
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return@withContext false
+        return@withContext null
     }
 
-    // 将系统选取的 Uri 复制到私有缓存区供上传读取
+    suspend fun saveMediaToStorage(context: Context, url: String, subDir: String, fileName: String): Boolean {
+        return saveMediaToStorageAndGetFile(context, url, subDir, fileName) != null
+    }
+
     suspend fun uriToTempFile(context: Context, uri: Uri): File? = withContext(Dispatchers.IO) {
         try {
             var fileName = "upload_file_${System.currentTimeMillis()}"
