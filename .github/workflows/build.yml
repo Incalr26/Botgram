@@ -63,11 +63,17 @@ jobs:
         run: |
           TAG="Botgram-v${VERSION}-${SHORT_SHA}"
           RELEASE_NAME="Botgram-v${VERSION}-${SHORT_SHA}"
+          # 使用 jq 构建包含 body 的 JSON，自动转义特殊字符（如换行、引号）
+          BODY_JSON=$(jq -n \
+            --arg tag "$TAG" \
+            --arg name "$RELEASE_NAME" \
+            --arg body "$COMMIT_MSG" \
+            '{tag_name: $tag, name: $name, draft: false, prerelease: true, body: $body}')
           release_response=$(curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
-            -d "{\"tag_name\":\"$TAG\", \"name\":\"$RELEASE_NAME\", \"draft\":false, \"prerelease\":true}")
+            -d "$BODY_JSON")
           upload_url=$(echo "$release_response" | jq -r .upload_url | sed 's/{?name,label}//')
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           curl -X POST \
@@ -85,7 +91,7 @@ jobs:
         run: |
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           # 使用 printf 构建 caption，\n 会被解释为换行符，避免 YAML 多行字符串问题
-          printf -v CAPTION "版本: ${VERSION}\n提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>\n<blockquote>${COMMIT_MSG}</blockquote>\n触发者: ${ACTOR}\n下载: <a href=\"https://t.me/Botgram_Channel/57\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+          printf -v CAPTION "版本: ${VERSION}\n提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>\n<blockquote>${COMMIT_MSG}</blockquote>\n触发者: ${ACTOR}\n下载: <a href=\"https://t.me/Botgram_Channel/58\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F "chat_id=${CHAT_ID}" \
             -F "document=@${APK_PATH}" \

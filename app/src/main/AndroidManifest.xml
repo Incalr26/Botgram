@@ -28,6 +28,11 @@
             </intent-filter>
         </activity>
 
+        <activity 
+            android:name=".ui.main.ChatInfoActivity" 
+            android:theme="@style/Theme.Botgram" />
+
+
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="false"

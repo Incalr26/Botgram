@@ -57,8 +57,10 @@ class ChatActivity : AppCompatActivity() {
     private var replyToMessageId: Long? = null
     private var chatType: String = "private"
 
-    private val pendingUploads = mutableListOf<Pair<Uri, String>>()
+    // 新增：用于存储当前正在编辑的消息 ID
+    private var editingMessageId: Long? = null
 
+    private val pendingUploads = mutableListOf<Pair<Uri, String>>()
     private val crashHandler = CoroutineExceptionHandler { _, throwable -> gotoCrash(throwable) }
 
     private val pickImagesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "photo") }
@@ -90,6 +92,11 @@ class ChatActivity : AppCompatActivity() {
             supportActionBar?.setDisplayShowHomeEnabled(true)
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
 
+            // 点击 Toolbar 跳转聊天详情
+            toolbar.setOnClickListener {
+                startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) })
+            }
+
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
 
@@ -104,12 +111,8 @@ class ChatActivity : AppCompatActivity() {
                     view.postDelayed({ if (!isFinishing && !isDestroyed) showMessageMenu(message, view) }, 150)
                     true
                 },
-                onAvatarLongClick = { message ->
-                    handleAvatarMention(message)
-                },
-                onFileClick = { message ->
-                    handleFileClick(message)
-                }
+                onAvatarLongClick = { message -> handleAvatarMention(message) },
+                onFileClick = { message -> handleFileClick(message) }
             )
 
             recyclerView = findViewById(R.id.messagesRecyclerView)
@@ -124,7 +127,6 @@ class ChatActivity : AppCompatActivity() {
             fun updateSendButtonState() {
                 val hasText = messageInput.text.toString().trim().isNotEmpty()
                 val hasMedia = pendingUploads.isNotEmpty()
-                
                 val typedValue = TypedValue()
                 theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
                 val primaryColor = typedValue.data
@@ -159,18 +161,27 @@ class ChatActivity : AppCompatActivity() {
 
             findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
                 replyToMessageId = null
+                editingMessageId = null
+                sendButton.setImageResource(R.drawable.ic_send) // 恢复发送图标
                 replyBanner.visibility = View.GONE
+                messageInput.text.clear()
             }
 
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
-                if (pendingUploads.isNotEmpty()) {
-                    uploadMediaAndSend(text)
-                } else if (text.isNotEmpty()) {
-                    sendTextMessage(text, replyToMessageId)
+                if (editingMessageId != null) {
+                    editSelfMessage(text, editingMessageId!!)
+                } else {
+                    if (pendingUploads.isNotEmpty()) {
+                        uploadMediaAndSend(text)
+                    } else if (text.isNotEmpty()) {
+                        sendTextMessage(text, replyToMessageId)
+                    }
                 }
                 
                 replyToMessageId = null
+                editingMessageId = null
+                sendButton.setImageResource(R.drawable.ic_send)
                 replyBanner.visibility = View.GONE
                 messageInput.text.clear()
                 pendingUploads.clear()
@@ -197,21 +208,23 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun handleAvatarMention(message: MessageEntity) {
-        val username = try {
-            JSONObject(message.rawJson ?: "{}").optJSONObject("from")?.optString("username")
-        } catch (e: Exception) { null }
-        
-        val mentionText = if (!username.isNullOrEmpty()) {
-            "@$username "
-        } else {
-            val name = message.senderName ?: "User"
-            "[$name](tg://user?id=${message.senderUserId}) "
-        }
+        val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
+        val from = rawObj.optJSONObject("from") ?: return
+        val username = from.optString("username", "")
         
         val input = findViewById<EditText>(R.id.messageInput)
         val start = Math.max(input.selectionStart, 0)
-        input.text.insert(start, mentionText)
+
+        val mentionText = if (username.isNotEmpty()) {
+            "@$username "
+        } else {
+            val fn = from.optString("first_name", "")
+            val ln = from.optString("last_name", "")
+            val name = listOf(fn, ln).filter { it.isNotEmpty() }.joinToString(" ")
+            "[$name](tg://user?id=${message.senderUserId}) "
+        }
         
+        input.text.insert(start, mentionText)
         input.requestFocus()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
@@ -269,10 +282,7 @@ class ChatActivity : AppCompatActivity() {
             val ext = file.extension.lowercase()
             val mimeMap = MimeTypeMap.getSingleton()
             val mime = mimeMap.getMimeTypeFromExtension(ext) ?: "*/*"
-            
-            // 解决 Android 7.0+ Uri 暴露异常，允许直接使用 File Uri 打开
             android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
-            
             intent.setDataAndType(uri, mime)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -284,12 +294,10 @@ class ChatActivity : AppCompatActivity() {
 
     private fun handleMediaSelected(uris: List<Uri>?, type: String) {
         if (uris.isNullOrEmpty()) return
-        
         if (pendingUploads.isNotEmpty() && pendingUploads.first().second != type) {
             Toast.makeText(this, "暂不支持混搭不同类型的媒体发送", Toast.LENGTH_SHORT).show()
             pendingUploads.clear()
         }
-        
         uris.forEach { pendingUploads.add(Pair(it, type)) }
         updatePreviewUI()
         
@@ -349,9 +357,9 @@ class ChatActivity : AppCompatActivity() {
                         setPadding(24, 24, 24, 24)
                         setColorFilter(primaryColor) 
                         when (type) {
-                            "video" -> setImageResource(R.drawable.ic_video)
-                            "audio" -> setImageResource(R.drawable.ic_audio)
-                            else -> setImageResource(R.drawable.ic_file_document)
+                            "video" -> setImageResource(android.R.drawable.presence_video_online)
+                            "audio" -> setImageResource(android.R.drawable.ic_media_play)
+                            else -> setImageResource(R.drawable.ic_menu_agenda)
                         }
                     }
                 }
@@ -402,11 +410,10 @@ class ChatActivity : AppCompatActivity() {
         theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
         val primaryColor = typedValue.data
 
-        // 全面采用新注入的高清不发灰 Material Vector 图标
         val items = listOf(
-            Triple("发送图片", R.drawable.ic_image, 1),
-            Triple("发送视频", R.drawable.ic_video, 2),
-            Triple("发送音频", R.drawable.ic_audio, 4),
+            Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
+            Triple("发送视频", android.R.drawable.presence_video_online, 2),
+            Triple("发送音频", android.R.drawable.ic_media_play, 4),
             Triple("发送文件", R.drawable.ic_file_document, 3)
         )
 
@@ -592,7 +599,6 @@ class ChatActivity : AppCompatActivity() {
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
                 val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
                 
-                // 完全按照要求：若是私聊，只显示私聊；否则拼接空格和“位成员”
                 if (chat.type == "private") {
                     supportActionBar?.subtitle = "私聊"
                 } else {
@@ -629,19 +635,21 @@ class ChatActivity : AppCompatActivity() {
         val primaryColor = typedValue.data
 
         val items = mutableListOf(
-            Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_plus_one_outline, 2),
-            Triple("转发式复读", R.drawable.ic_repeat, 6),
-            Triple("转发给...", R.drawable.ic_send, 7),
-            Triple("回复", R.drawable.ic_reply, 4)
+            Triple("复制", android.R.drawable.ic_menu_copy, 1),
+            Triple("复读", android.R.drawable.ic_menu_rotate, 2),
+            Triple("转发式复读", android.R.drawable.ic_menu_revert, 6),
+            Triple("转发给...", android.R.drawable.ic_menu_send, 7),
+            Triple("回复", android.R.drawable.ic_menu_revert, 4)
         )
-        if (chatType != "private") items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
-        if (message.isOutgoing) items.add(Triple("撤回", R.drawable.ic_revoke, 3))
+        if (chatType != "private") items.add(2, Triple("复制链接", android.R.drawable.ic_menu_share, 5))
+        if (message.isOutgoing) {
+            items.add(Triple("编辑", android.R.drawable.ic_menu_edit, 9))
+            items.add(Triple("撤回", android.R.drawable.ic_menu_delete, 3))
+        }
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio")) {
-            // 采用原版安全存在的保存图标
-            items.add(0, Triple("保存", R.drawable.ic_save_media, 8))
+            items.add(0, Triple("保存", android.R.drawable.ic_menu_save, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -703,6 +711,68 @@ class ChatActivity : AppCompatActivity() {
             6 -> handleRepeatAction(message, true)
             7 -> showForwardDialog(message)
             8 -> saveMedia(message)
+            9 -> {
+                editingMessageId = message.messageId
+                val input = findViewById<EditText>(R.id.messageInput)
+                input.setText(message.text)
+                input.setSelection(input.text.length)
+                
+                val typedValue = TypedValue()
+                theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+                findViewById<ImageButton>(R.id.sendButton).apply {
+                    setImageResource(android.R.drawable.ic_menu_edit) // 改为提示保存的图标
+                    setColorFilter(typedValue.data, PorterDuff.Mode.SRC_IN)
+                }
+                
+                val banner = findViewById<LinearLayout>(R.id.replyBanner)
+                findViewById<TextView>(R.id.replyText).text = "正在编辑消息"
+                banner.visibility = View.VISIBLE
+                
+                input.requestFocus()
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+    }
+
+    private fun editSelfMessage(newText: String, msgId: Long) {
+        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
+            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+            
+            // 为了安全降级，优先发送 Markdown 以触发加粗和超链接解析，如果 Telegram 不接受这个文本的特殊字符，自动降级为无格式纯文本。
+            val jsonBody = JSONObject().apply { 
+                put("chat_id", chatId)
+                put("message_id", msgId)
+                put("text", newText)
+                put("parse_mode", "Markdown")
+            }
+            
+            val req = Request.Builder().url("https://api.telegram.org/bot$token/editMessageText").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+            var res = ApiClient.getClient().newCall(req).execute()
+            
+            if (!res.isSuccessful) {
+                // 降级：如果 Markdown 解析出错，转为纯文本强发
+                jsonBody.remove("parse_mode")
+                val fallbackReq = Request.Builder().url("https://api.telegram.org/bot$token/editMessageText").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+                res = ApiClient.getClient().newCall(fallbackReq).execute()
+            }
+            
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    // 更新本地数据库中对应 Message 的 text
+                    val oldMsg = messageRepository.getMessages(chatId).find { it.messageId == msgId }
+                    if (oldMsg != null) {
+                        messageRepository.insertMessage(oldMsg.copy(text = newText))
+                    }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ChatActivity, "已修改", Toast.LENGTH_SHORT).show()
+                        loadMessagesInternal()
+                    }
+                }
+            } else {
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "修改失败，可能超过时限或内容相同", Toast.LENGTH_SHORT).show() }
+            }
         }
     }
 
@@ -831,9 +901,25 @@ class ChatActivity : AppCompatActivity() {
     private fun sendTextMessage(text: String, replyTo: Long?) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); replyTo?.let { put("reply_to_message_id", it) } }
+            
+            // 为了安全降级，优先发送 Markdown 以触发加粗和超链接解析，如果 Telegram 不接受这个文本的特殊字符，自动降级为无格式纯文本。
+            val jsonBody = JSONObject().apply { 
+                put("chat_id", chatId)
+                put("text", text)
+                put("parse_mode", "Markdown")
+                replyTo?.let { put("reply_to_message_id", it) } 
+            }
+            
             val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
-            val res = ApiClient.getClient().newCall(req).execute()
+            var res = ApiClient.getClient().newCall(req).execute()
+            
+            if (!res.isSuccessful) {
+                // 降级：如果 Markdown 解析出错，转为纯文本强发
+                jsonBody.remove("parse_mode")
+                val fallbackReq = Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+                res = ApiClient.getClient().newCall(fallbackReq).execute()
+            }
+            
             if (res.isSuccessful) {
                 val msg = JSONObject(res.body?.string() ?: "")
                 if (msg.getBoolean("ok")) {
