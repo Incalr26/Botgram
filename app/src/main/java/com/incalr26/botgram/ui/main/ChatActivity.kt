@@ -119,9 +119,11 @@ class ChatActivity : AppCompatActivity() {
                 if (hasText || hasMedia) {
                     sendButton.isEnabled = true
                     sendButton.clearColorFilter()
+                    sendButton.alpha = 1.0f
                 } else {
                     sendButton.isEnabled = false
                     sendButton.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN)
+                    sendButton.alpha = 0.5f
                 }
             }
             updateSendButtonState()
@@ -156,7 +158,7 @@ class ChatActivity : AppCompatActivity() {
             }
 
             lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-                loadTitleAndType() // 这里包含了正确的 memberCount 获取 API
+                loadTitleAndType()
                 loadMessagesInternal()
                 chatRepository.updateUnreadCount(chatId, 0)
             }
@@ -183,9 +185,10 @@ class ChatActivity : AppCompatActivity() {
         val sendButton = findViewById<ImageButton>(R.id.sendButton)
         sendButton.isEnabled = true
         sendButton.clearColorFilter()
+        sendButton.alpha = 1.0f
     }
 
-    // 动态生成横向画廊预览
+    // 动态生成横向正方形画廊预览
     private fun updatePreviewUI() {
         val previewContainer = findViewById<LinearLayout>(R.id.mediaPreviewContainer)
         val previewList = findViewById<LinearLayout>(R.id.previewList)
@@ -249,6 +252,7 @@ class ChatActivity : AppCompatActivity() {
                             val btn = findViewById<ImageButton>(R.id.sendButton)
                             btn.isEnabled = false
                             btn.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN)
+                            btn.alpha = 0.5f
                         }
                     }
                 }
@@ -329,7 +333,6 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             
-            // 如果是单个文件，直接使用老接口
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first()
                 val type = item.second
@@ -361,7 +364,6 @@ class ChatActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                // 如果是多个文件，触发高级 sendMediaGroup (相册) 逻辑
                 val mediaArray = JSONArray()
                 val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
                 builder.addFormDataPart("chat_id", chatId.toString())
@@ -391,7 +393,7 @@ class ChatActivity : AppCompatActivity() {
                 val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMediaGroup").post(builder.build()).build()
                 val res = ApiClient.getClient().newCall(req).execute()
                 
-                tempFiles.forEach { it.delete() } // 统一清理残渣
+                tempFiles.forEach { it.delete() }
 
                 if (res.isSuccessful) {
                     val msg = JSONObject(res.body?.string() ?: "")
@@ -429,6 +431,13 @@ class ChatActivity : AppCompatActivity() {
         loadMessagesInternal()
     }
 
+    // 补回了这个非常重要的方法，彻底修复 Unresolved reference 编译报错！
+    private fun setReplyBanner(message: MessageEntity) {
+        val banner = findViewById<LinearLayout>(R.id.replyBanner)
+        findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"
+        banner.visibility = View.VISIBLE
+    }
+
     private fun getStatusBarHeight(): Int {
         val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
         return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
@@ -439,7 +448,6 @@ class ChatActivity : AppCompatActivity() {
         var memberCount: Int? = null
         try {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: ""
-            // 独立查询成员数量以保证可靠获取
             val countReq = Request.Builder().url("https://api.telegram.org/bot$token/getChatMemberCount?chat_id=$chatId").build()
             val countRes = ApiClient.getClient().newCall(countReq).execute()
             if (countRes.isSuccessful) {
@@ -495,7 +503,7 @@ class ChatActivity : AppCompatActivity() {
         if (message.isOutgoing) items.add(Triple("撤回", R.drawable.ic_revoke, 3))
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
-        if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document")) {
+        if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio")) {
             items.add(0, Triple("保存", R.drawable.ic_save_media, 8))
         }
 
@@ -516,7 +524,6 @@ class ChatActivity : AppCompatActivity() {
         container.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupHeight = container.measuredHeight
         
-        // 绝对坐标防越界阻截：如果菜单会弹出屏幕，就翻转到气泡上方！
         val anchorLocation = IntArray(2)
         anchor.getLocationOnScreen(anchorLocation)
         val screenHeight = resources.displayMetrics.heightPixels

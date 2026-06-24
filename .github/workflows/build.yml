@@ -39,7 +39,6 @@ jobs:
       - name: Get commit details
         run: |
           SHORT_SHA=$(git rev-parse --short HEAD)
-          # 使用多行写入方式，避免特殊字符（逗号、换行等）导致格式错误
           {
             echo "SHORT_SHA=$SHORT_SHA"
             echo "COMMIT_MSG<<EOF"
@@ -87,9 +86,18 @@ jobs:
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           # 将提交信息中的换行符替换为 <br>，保持 Telegram HTML 换行
           COMMIT_MSG_BR="${COMMIT_MSG//$'\n'/<br>}"
-          CAPTION="版本: ${VERSION}<br>提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a><br><blockquote>${COMMIT_MSG_BR}</blockquote><br>触发者: ${ACTOR}<br>下载: <a href=\"https://t.me/Botgram_Channel/50\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
-          curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
+          CAPTION="版本: ${VERSION}<br>提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a><br><blockquote>${COMMIT_MSG_BR}</blockquote><br>触发者: ${ACTOR}<br>下载: <a href=\"https://t.me/Botgram_Channel\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+          # 发送请求并保存响应
+          RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F "chat_id=${CHAT_ID}" \
             -F "document=@${APK_PATH}" \
             -F "caption=${CAPTION}" \
-            -F "parse_mode=HTML"
+            -F "parse_mode=HTML")
+          # 检查响应是否成功
+          OK=$(echo "$RESPONSE" | jq -r '.ok')
+          if [ "$OK" != "true" ]; then
+            echo "Telegram API 返回错误: $RESPONSE"
+            exit 1
+          else
+            echo "Telegram 发送成功"
+          fi
