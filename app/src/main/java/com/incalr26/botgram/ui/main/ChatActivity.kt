@@ -87,7 +87,6 @@ class ChatActivity : AppCompatActivity() {
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             supportActionBar?.setDisplayShowHomeEnabled(true)
-            // 强行缩小副标题字号以符合官方规范
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
 
             chatId = intent.getLongExtra("chatId", 0)
@@ -119,24 +118,20 @@ class ChatActivity : AppCompatActivity() {
                 val hasText = messageInput.text.toString().trim().isNotEmpty()
                 val hasMedia = pendingUploads.isNotEmpty()
                 
-                // 获取 Material You 主题色
                 val typedValue = TypedValue()
                 theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
                 val primaryColor = typedValue.data
 
                 if (hasText || hasMedia) {
                     sendButton.isEnabled = true
-                    // 激活时使用主题色，符合 Material You
                     sendButton.setColorFilter(primaryColor, PorterDuff.Mode.SRC_IN)
                     sendButton.alpha = 1.0f
                 } else {
                     sendButton.isEnabled = false
-                    // 禁用时变灰
                     sendButton.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN)
                     sendButton.alpha = 0.5f
                 }
             }
-            // 刚进入聊天页面时，立刻调用一次以确保按钮处于灰色不可用状态
             updateSendButtonState()
 
             messageInput.addTextChangedListener(object : TextWatcher {
@@ -148,7 +143,6 @@ class ChatActivity : AppCompatActivity() {
             attachButton.setOnClickListener {
                 val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                 if (imm.isActive(messageInput)) {
-                    // 如果键盘开启，先隐藏键盘，延迟后弹出，防止错位
                     imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
                     attachButton.postDelayed({ showAttachMenu(attachButton) }, 250)
                 } else {
@@ -206,7 +200,6 @@ class ChatActivity : AppCompatActivity() {
         uris.forEach { pendingUploads.add(Pair(it, type)) }
         updatePreviewUI()
         
-        // 更新发送按钮状态
         val sendButton = findViewById<ImageButton>(R.id.sendButton)
         val typedValue = TypedValue()
         theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
@@ -261,11 +254,11 @@ class ChatActivity : AppCompatActivity() {
                     else -> {
                         scaleType = ImageView.ScaleType.FIT_CENTER
                         setPadding(24, 24, 24, 24)
-                        setColorFilter(primaryColor) // 采用 Material You 主题色渲染图标
+                        setColorFilter(primaryColor)
                         when (type) {
                             "video" -> setImageResource(android.R.drawable.presence_video_online)
                             "audio" -> setImageResource(android.R.drawable.ic_media_play)
-                            else -> setImageResource(R.drawable.ic_menu_agenda)
+                            else -> setImageResource(R.drawable.ic_file_document)
                         }
                     }
                 }
@@ -306,7 +299,7 @@ class ChatActivity : AppCompatActivity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background)
-            elevation = 12f * resources.displayMetrics.density // 和长按菜单保持一致的阴影高度
+            elevation = 12f * resources.displayMetrics.density
             clipToOutline = true
         }
 
@@ -319,8 +312,8 @@ class ChatActivity : AppCompatActivity() {
         val items = listOf(
             Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
             Triple("发送视频", android.R.drawable.presence_video_online, 2),
-            Triple("发送音频", android.R.drawable.ic_media_play, 4), // 已恢复发送音频
-            Triple("发送文件", R.drawable.ic_menu_agenda, 3)
+            Triple("发送音频", android.R.drawable.ic_media_play, 4),
+            Triple("发送文件", R.drawable.ic_file_document, 3)
         )
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
@@ -335,7 +328,6 @@ class ChatActivity : AppCompatActivity() {
             itemView.findViewById<ImageView>(R.id.menu_icon).apply { 
                 this.layoutParams = layoutParams
                 setImageResource(iconRes)
-                // 采用和长按菜单一致的 Material You 颜色，不再发灰
                 setColorFilter(primaryColor) 
             }
             itemView.findViewById<TextView>(R.id.menu_text).apply { 
@@ -372,7 +364,6 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             
-            // 为上传专属克隆高超时限制的 OkHttp Client
             val uploadClient = ApiClient.getClient().newBuilder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(120, TimeUnit.SECONDS)
@@ -506,7 +497,6 @@ class ChatActivity : AppCompatActivity() {
                 chatType = chat.type
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
                 val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
-                // 严格遵守：空格分隔，不要点
                 supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
             }
         }
@@ -550,7 +540,7 @@ class ChatActivity : AppCompatActivity() {
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio")) {
-            items.add(0, Triple("保存", R.drawable.ic_menu_save, 8))
+            items.add(0, Triple("保存", android.R.drawable.ic_menu_save, 8))
         }
 
         val popupWindow = PopupWindow(container, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
