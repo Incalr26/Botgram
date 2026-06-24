@@ -84,16 +84,17 @@ jobs:
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
-          # 将提交信息中的换行符替换为 <br>，保持 Telegram HTML 换行
-          COMMIT_MSG_BR="${COMMIT_MSG//$'\n'/<br>}"
-          CAPTION="版本: ${VERSION}<br>提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a><br><blockquote>${COMMIT_MSG_BR}</blockquote><br>触发者: ${ACTOR}<br>下载: <a href=\"https://t.me/Botgram_Channel\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
-          # 发送请求并保存响应
+          # 使用真实换行符，而非 <br>
+          CAPTION="版本: ${VERSION}
+提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>
+<blockquote>${COMMIT_MSG}</blockquote>
+触发者: ${ACTOR}
+下载: <a href=\"https://t.me/Botgram_Channel/51\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F "chat_id=${CHAT_ID}" \
             -F "document=@${APK_PATH}" \
             -F "caption=${CAPTION}" \
             -F "parse_mode=HTML")
-          # 检查响应是否成功
           OK=$(echo "$RESPONSE" | jq -r '.ok')
           if [ "$OK" != "true" ]; then
             echo "Telegram API 返回错误: $RESPONSE"
