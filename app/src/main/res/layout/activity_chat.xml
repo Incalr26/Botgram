@@ -6,123 +6,128 @@
     android:orientation="vertical"
     android:background="?attr/colorSurface">
 
-    <View android:id="@+id/statusBarPlaceholder" android:layout_width="match_parent" android:layout_height="0dp" android:background="?attr/colorSurface" />
+    <View
+        android:id="@+id/statusBarPlaceholder"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?attr/colorSurfaceVariant" />
 
-    <com.google.android.material.appbar.AppBarLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurfaceVariant"
+        app:elevation="8dp"
+        app:title="聊天"
+        app:titleTextColor="?attr/colorOnSurface"
+        app:subtitleTextColor="?attr/colorOnSurfaceVariant"
+        app:navigationIcon="?attr/homeAsUpIndicator" />
+
+    <LinearLayout
+        android:id="@+id/replyBanner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:elevation="0dp"
-        android:background="?attr/colorSurface">
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize" />
-    </com.google.android.material.appbar.AppBarLayout>
+        android:orientation="horizontal"
+        android:background="?attr/colorSurfaceVariant"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:gravity="center_vertical">
+
+        <View
+            android:layout_width="3dp"
+            android:layout_height="match_parent"
+            android:background="?attr/colorPrimary" />
+
+        <TextView
+            android:id="@+id/replyText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textSize="14sp"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <ImageButton
+            android:id="@+id/cancelReply"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            app:tint="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messagesRecyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp" />
+        android:background="?attr/colorSurface" />
+
+    <LinearLayout
+        android:id="@+id/mediaPreviewContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="?attr/colorSurfaceVariant"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:clipToPadding="false"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp">
+            <LinearLayout
+                android:id="@+id/previewList"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical" />
+        </HorizontalScrollView>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="?attr/colorSurface">
-        
-        <LinearLayout
-            android:id="@+id/mediaPreviewContainer"
-            android:layout_width="match_parent"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:gravity="bottom">
+
+        <ImageButton
+            android:id="@+id/attachButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_attach"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+
+        <EditText
+            android:id="@+id/messageInput"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:visibility="gone"
-            android:background="?attr/colorSurfaceVariant"
-            android:padding="8dp">
-            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none">
-                <LinearLayout android:id="@+id/previewList" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" />
-            </HorizontalScrollView>
-        </LinearLayout>
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:minHeight="48dp"
+            android:maxHeight="150dp"
+            android:background="@null"
+            android:hint="输入消息..."
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:textSize="16sp" />
 
-        <!-- 完美的回复与编辑提示条 -->
-        <LinearLayout
-            android:id="@+id/replyBanner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:visibility="gone"
-            android:background="?attr/colorSurfaceVariant"
-            android:gravity="center_vertical">
-
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_reply"
-                app:tint="?attr/colorPrimary" />
-
-            <TextView
-                android:id="@+id/replyText"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:textSize="13sp"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <!-- 去掉难看发灰背景，使用透明波纹 -->
-            <ImageButton
-                android:id="@+id/cancelReply"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:src="@android:drawable/ic_menu_close_clear_cancel"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                app:tint="?attr/colorOnSurfaceVariant" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="8dp"
-            android:gravity="bottom">
-
-            <ImageButton
-                android:id="@+id/attachButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_add"
-                app:tint="?attr/colorOnSurfaceVariant" />
-
-            <EditText
-                android:id="@+id/messageInput"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:maxHeight="150dp"
-                android:background="@null"
-                android:hint="输入消息..."
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:textColor="?attr/colorOnSurface"
-                android:textColorHint="?attr/colorOnSurfaceVariant"
-                android:textSize="16sp" />
-
-            <ImageButton
-                android:id="@+id/sendButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_send" />
-        </LinearLayout>
+        <ImageButton
+            android:id="@+id/sendButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_send"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:scaleType="centerInside"
+            android:padding="12dp" />
     </LinearLayout>
 </LinearLayout>

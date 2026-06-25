@@ -9,6 +9,7 @@ import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
+import android.text.Html
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
@@ -282,7 +283,7 @@ class ChatActivity : AppCompatActivity() {
                 when (type) {
                     "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(uri) }
                     else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(primaryColor) 
-                        when (type) { "video" -> setImageResource(android.R.drawable.ic_media_play); else -> setImageResource(R.drawable.ic_file_document) }
+                        when (type) { "video" -> setImageResource(android.R.drawable.presence_video_online); else -> setImageResource(R.drawable.ic_file_document) }
                     }
                 }
             }
@@ -303,7 +304,7 @@ class ChatActivity : AppCompatActivity() {
         
         val items = listOf(
             Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
-            Triple("发送视频", android.R.drawable.ic_menu_camera, 2),
+            Triple("发送视频", android.R.drawable.presence_video_online, 2),
             Triple("发送音频", android.R.drawable.ic_media_play, 4),
             Triple("发送文件", R.drawable.ic_file_document, 3)
         )
@@ -322,16 +323,11 @@ class ChatActivity : AppCompatActivity() {
 
     private fun uploadMediaAndSend(caption: String) {
         if (pendingUploads.isEmpty()) return
-        Toast.makeText(this, "正在后台上传...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在上传...", Toast.LENGTH_SHORT).show()
         val uploadsSnapshot = pendingUploads.toList()
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            // 解决大视频上传失败不显示的史诗级 Timeout (12个小时)
-            val uploadClient = ApiClient.getClient().newBuilder()
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(12, TimeUnit.HOURS)
-                .readTimeout(12, TimeUnit.HOURS)
-                .build()
+            val uploadClient = ApiClient.getClient().newBuilder().connectTimeout(60, TimeUnit.SECONDS).writeTimeout(12, TimeUnit.HOURS).readTimeout(12, TimeUnit.HOURS).build()
 
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first(); val type = item.second; val file = FileHelper.uriToTempFile(this@ChatActivity, item.first) ?: return@launch
@@ -368,9 +364,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private suspend fun insertAndRefresh(result: JSONObject, caption: String) {
-        val messageEntity = MessageEntity(
-            messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = caption, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = null, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null
-        )
+        val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = caption, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = null, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null)
         messageRepository.insertMessage(messageEntity)
         chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000)
         loadMessagesInternal()
@@ -399,17 +393,18 @@ class ChatActivity : AppCompatActivity() {
                 chatType = chat.type
                 val username = chat.username
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
-                val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
+                val typeStr = when (chat.type) { 
+                    "private" -> "私聊"
+                    "group" -> "群组"
+                    "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "超级群组"
+                    "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "频道"
+                    else -> chat.type 
+                }
                 
-                // 完美解决顶栏链接识别
                 if (chat.type == "private") {
-                    supportActionBar?.subtitle = if (!username.isNullOrEmpty()) "@$username" else "私聊"
+                    supportActionBar?.subtitle = "私聊"
                 } else {
-                    if (!username.isNullOrEmpty()) {
-                        supportActionBar?.subtitle = "https://t.me/$username"
-                    } else {
-                        supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
-                    }
+                    supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
                 }
             }
         }
@@ -428,12 +423,14 @@ class ChatActivity : AppCompatActivity() {
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
         val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
 
+        // 百分百还原你的原版长按菜单图标（你本地的 R.drawable...）
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
             Triple("复读", R.drawable.ic_forward, 2),
             Triple("转发式复读", R.drawable.ic_forward, 6),
             Triple("转发给...", R.drawable.ic_forward, 7),
-            Triple("回复", R.drawable.ic_reply, 4)
+            Triple("回复", R.drawable.ic_reply, 4),
+            Triple("添加表情回应", android.R.drawable.ic_menu_add, 11) // 新增回应功能
         )
         if (chatType != "private") items.add(2, Triple("复制链接", R.drawable.ic_share, 5))
         if (message.isOutgoing) {
@@ -488,7 +485,24 @@ class ChatActivity : AppCompatActivity() {
                 input.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, 0)
             }
             10 -> showEditHistoryDialog(message.editHistory)
+            11 -> showReactionDialog(message.messageId)
         }
+    }
+
+    private fun showReactionDialog(msgId: Long) {
+        val emojis = arrayOf("👍", "❤️", "🔥", "😂", "👏", "🎉", "💩", "😢")
+        MaterialAlertDialogBuilder(this).setTitle("添加回应").setItems(emojis) { _, which ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
+                val reactionJson = JSONObject().apply {
+                    put("chat_id", chatId)
+                    put("message_id", msgId)
+                    put("reaction", JSONArray().apply { put(JSONObject().apply { put("type", "emoji"); put("emoji", emojis[which]) }) })
+                }
+                ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/setMessageReaction").post(reactionJson.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute()
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "表情已发送", Toast.LENGTH_SHORT).show() }
+            }
+        }.show()
     }
 
     private fun showEditHistoryDialog(historyJson: String?) {
@@ -496,8 +510,9 @@ class ChatActivity : AppCompatActivity() {
             val arr = JSONArray(historyJson ?: "[]")
             val items = Array(arr.length()) { i -> 
                 val obj = arr.getJSONObject(i)
-                val timeStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(obj.optLong("date", 0L) * 1000))
-                "$timeStr\n${obj.optString("text", "")}"
+                val timeStr = SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()).format(Date(obj.optLong("date", 0L) * 1000))
+                val text = obj.optString("text", "")
+                Html.fromHtml("<small><font color='#888888'>$timeStr</font></small><br/>$text", Html.FROM_HTML_MODE_COMPACT)
             }
             MaterialAlertDialogBuilder(this).setTitle("编辑历史").setItems(items, null).setPositiveButton("关闭", null).show()
         } catch (e: Exception) { Toast.makeText(this, "解析历史失败", Toast.LENGTH_SHORT).show() }
@@ -519,7 +534,7 @@ class ChatActivity : AppCompatActivity() {
                     if (oldMsg != null) messageRepository.insertMessage(oldMsg.copy(text = newText))
                     withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已修改", Toast.LENGTH_SHORT).show(); loadMessagesInternal() }
                 }
-            } else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "修改失败，可能超过时限或内容相同", Toast.LENGTH_SHORT).show() }
+            } else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "修改失败", Toast.LENGTH_SHORT).show() }
         }
     }
 
@@ -537,7 +552,7 @@ class ChatActivity : AppCompatActivity() {
             val url = FileHelper.getTelegramFileUrl(fileId, token)
             if (!url.isNullOrEmpty()) {
                 val success = FileHelper.saveMediaToStorage(this@ChatActivity, url, subDir, fName)
-                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, if (success) "已保存到设定目录" else "保存失败，请检查路径权限", Toast.LENGTH_SHORT).show() }
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, if (success) "已保存" else "保存失败", Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -582,7 +597,7 @@ class ChatActivity : AppCompatActivity() {
                 messageRepository.markMessageAsDeleted(messageId, chatId)
                 withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已撤回", Toast.LENGTH_SHORT).show(); loadMessagesInternal() }
             } else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回失败", Toast.LENGTH_SHORT).show() }
-        } catch (e: Exception) { withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "撤回异常: ${e.message}", Toast.LENGTH_SHORT).show() } }
+        } catch (e: Exception) {}
     }
 
     private fun sendTextMessage(text: String, replyTo: Long?) {

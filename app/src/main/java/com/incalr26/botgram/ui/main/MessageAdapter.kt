@@ -47,6 +47,7 @@ class MessageAdapter(
 
     private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private val minFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun formatSize(size: Long): String {
@@ -307,7 +308,6 @@ class MessageAdapter(
             holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
         }
 
-        // 渲染表情回应
         if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
             try {
                 val arr = JSONArray(message.reactions)
@@ -340,7 +340,11 @@ class MessageAdapter(
             SimpleDateFormat("yy年MM月dd日", Locale.getDefault()).format(Date(message.date * 1000))
         }
         
-        val editStr = if (message.isEdited) { val ed = try { org.json.JSONObject(message.rawJson ?: "{}").optLong("edit_date", 0L) } catch(e:Exception){0L}; if (ed > 0) " [已编辑 ${timeFormat.format(java.util.Date(ed * 1000))}]" else " [已编辑]" } else ""
+        val editStr = if (message.isEdited) { 
+            val ed = rawObj.optLong("edit_date", 0L)
+            if (ed > 0) " [已编辑 ${minFormat.format(Date(ed * 1000))}]" else " [已编辑]" 
+        } else ""
+        
         holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()
