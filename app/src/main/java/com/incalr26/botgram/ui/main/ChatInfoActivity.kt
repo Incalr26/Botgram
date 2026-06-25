@@ -62,9 +62,7 @@ class ChatInfoActivity : AppCompatActivity() {
                 } catch (e: Exception) { null }
             }
 
-            if (resultJson != null && resultJson.getBoolean("ok")) {
-                renderUI(resultJson.getJSONObject("result"))
-            }
+            if (resultJson != null && resultJson.getBoolean("ok")) renderUI(resultJson.getJSONObject("result"))
             
             val avatarUrl = withContext(Dispatchers.IO) { AvatarHelper.getUserAvatar(chatId) }
             if (!avatarUrl.isNullOrEmpty()) {
@@ -98,38 +96,20 @@ class ChatInfoActivity : AppCompatActivity() {
             card.addView(layout); container.addView(card)
         }
 
-        // 新增权限开关卡片
         fun addPermissionCard(permObj: JSONObject) {
-            val card = MaterialCardView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }
-                radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant))
-            }
+            val card = MaterialCardView(this).apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }; radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant)) }
             val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
-            val sectionTitle = TextView(this).apply { text = "管理成员权限"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) }
-            layout.addView(sectionTitle)
-
-            val pMap = mapOf(
-                "can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件",
-                "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_polls" to "发送投票",
-                "can_add_web_page_previews" to "添加网页预览", "can_change_info" to "修改群信息", "can_invite_users" to "邀请用户",
-                "can_pin_messages" to "置顶消息"
-            )
+            layout.addView(TextView(this).apply { text = "群组基础权限状态"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) })
             
+            val pMap = mapOf("can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件", "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_polls" to "发送投票", "can_add_web_page_previews" to "添加网页预览", "can_change_info" to "修改群信息", "can_invite_users" to "邀请用户", "can_pin_messages" to "置顶消息")
             pMap.forEach { (key, cnName) ->
                 if (permObj.has(key)) {
-                    val row = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 8) }
-                    val txtLayout = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
-                    val tvCn = TextView(this@ChatInfoActivity).apply { text = cnName; textSize = 16f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)) }
-                    val tvEn = TextView(this@ChatInfoActivity).apply { text = key; textSize = 11f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)) }
-                    txtLayout.addView(tvCn); txtLayout.addView(tvEn)
-                    
-                    val sw = SwitchCompat(this@ChatInfoActivity).apply {
-                        isChecked = permObj.getBoolean(key)
-                        // TODO: 绑定变更 API 调用，留给下一个版本
-                        isEnabled = false 
-                    }
-                    row.addView(txtLayout); row.addView(sw)
-                    layout.addView(row)
+                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 8) }
+                    val txtLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+                    txtLayout.addView(TextView(this).apply { text = cnName; textSize = 16f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)) })
+                    txtLayout.addView(TextView(this).apply { text = key; textSize = 11f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)) })
+                    val sw = SwitchCompat(this).apply { isChecked = permObj.getBoolean(key); isEnabled = false }
+                    row.addView(txtLayout); row.addView(sw); layout.addView(row)
                 }
             }
             card.addView(layout); container.addView(card)
@@ -139,7 +119,7 @@ class ChatInfoActivity : AppCompatActivity() {
         basicInfo.add("Chat ID" to chat.getLong("id").toString())
         val type = chat.getString("type")
         val username = chat.optString("username")
-        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开超级群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
+        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
         if (username.isNotEmpty()) {
             if (type == "private") basicInfo.add("用户名" to "@$username") else basicInfo.add("公开链接" to "https://t.me/$username")
         }

@@ -91,7 +91,10 @@ class ChatActivity : AppCompatActivity() {
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
-            toolbar.setOnClickListener { startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) }) }
+
+            toolbar.setOnClickListener {
+                startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) })
+            }
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
@@ -101,11 +104,19 @@ class ChatActivity : AppCompatActivity() {
             messageRepository = MessageRepository(app.databaseHelper)
 
             adapter = MessageAdapter(
+                onClick = { message, view ->
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    if (imm.isActive && currentFocus != null) imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
+                    view.postDelayed({ if (!isFinishing && !isDestroyed) showMessageMenu(message, view) }, 150)
+                },
                 onLongClick = { message, view ->
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                     if (imm.isActive && currentFocus != null) imm.hideSoftInputFromWindow(currentFocus?.windowToken, 0)
                     view.postDelayed({ if (!isFinishing && !isDestroyed) showMessageMenu(message, view) }, 150)
                     true
+                },
+                onAvatarClick = { message ->
+                    message.senderUserId?.let { id -> startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", id) }) }
                 },
                 onFileClick = { message -> handleFileClick(message) }
             )
@@ -211,10 +222,11 @@ class ChatActivity : AppCompatActivity() {
         if (pendingUploads.isEmpty()) { previewContainer.visibility = View.GONE; return }
         previewContainer.visibility = View.VISIBLE; previewList.removeAllViews()
         val density = resources.displayMetrics.density; val tv = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tv, true)
+        
         for ((index, item) in pendingUploads.withIndex()) {
             val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams((64 * density).toInt(), (64 * density).toInt()).apply { marginEnd = (8 * density).toInt() } }
             val card = MaterialCardView(this).apply { layoutParams = FrameLayout.LayoutParams((56 * density).toInt(), (56 * density).toInt()).apply { gravity = Gravity.BOTTOM or Gravity.START }; radius = 8 * density; setCardBackgroundColor(Color.parseColor("#E0E0E0")); cardElevation = 0f }
-            val icon = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); when (item.second) { "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(item.first) } else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(tv.data); when (item.second) { "video" -> setImageResource(R.drawable.ic_video); "audio" -> setImageResource(R.drawable.ic_audio); else -> setImageResource(R.drawable.ic_file) } } } }
+            val icon = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); when (item.second) { "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(item.first) } else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(tv.data); when (item.second) { "video" -> setImageResource(android.R.drawable.presence_video_online); else -> setImageResource(R.drawable.ic_file_document) } } } }
             card.addView(icon)
             val closeBtn = ImageButton(this).apply { layoutParams = FrameLayout.LayoutParams((20 * density).toInt(), (20 * density).toInt()).apply { gravity = Gravity.TOP or Gravity.END }; setImageResource(R.drawable.ic_close); background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.avatar_bg); setColorFilter(Color.WHITE); setPadding(8, 8, 8, 8); scaleType = ImageView.ScaleType.FIT_CENTER; setOnClickListener { pendingUploads.removeAt(index); updatePreviewUI(); if (pendingUploads.isEmpty() && findViewById<EditText>(R.id.messageInput).text.toString().trim().isEmpty()) { val btn = findViewById<ImageButton>(R.id.sendButton); btn.isEnabled = false; btn.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN); btn.alpha = 0.5f } } }
             frame.addView(card); frame.addView(closeBtn); previewList.addView(frame)
@@ -226,12 +238,11 @@ class ChatActivity : AppCompatActivity() {
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
         val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
         
-        // 使用新绘制的不发灰 Material 图标，并新增内联键盘
         val items = listOf(
-            Triple("发送图片", R.drawable.ic_photo, 1),
-            Triple("发送视频", R.drawable.ic_video, 2),
-            Triple("发送音频", R.drawable.ic_audio, 4),
-            Triple("发送文件", R.drawable.ic_file, 3),
+            Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
+            Triple("发送视频", android.R.drawable.presence_video_online, 2),
+            Triple("发送音频", android.R.drawable.ic_media_play, 4),
+            Triple("发送文件", R.drawable.ic_file_document, 3),
             Triple("发送内联键盘", R.drawable.ic_keyboard, 5)
         )
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
@@ -270,6 +281,7 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val uploadClient = ApiClient.getClient().newBuilder().connectTimeout(60, TimeUnit.SECONDS).writeTimeout(12, TimeUnit.HOURS).readTimeout(12, TimeUnit.HOURS).build()
+
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first(); val type = item.second; val file = FileHelper.uriToTempFile(this@ChatActivity, item.first) ?: return@launch
                 val mimeType = contentResolver.getType(item.first) ?: "application/octet-stream"
@@ -286,11 +298,16 @@ class ChatActivity : AppCompatActivity() {
                 uploadsSnapshot.forEachIndexed { index, pair ->
                     val type = if (pair.second == "audio" || pair.second == "document") "document" else pair.second
                     val file = FileHelper.uriToTempFile(this@ChatActivity, pair.first)
-                    if (file != null) { tempFiles.add(file); val mediaObj = JSONObject().apply { put("type", type); put("media", "attach://file$index"); if (index == 0 && caption.isNotEmpty()) put("caption", caption) }; mediaArray.put(mediaObj); val mimeType = contentResolver.getType(pair.first) ?: "application/octet-stream"; builder.addFormDataPart("file$index", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull())) }
+                    if (file != null) {
+                        tempFiles.add(file); val mediaObj = JSONObject().apply { put("type", type); put("media", "attach://file$index"); if (index == 0 && caption.isNotEmpty()) put("caption", caption) }
+                        mediaArray.put(mediaObj); val mimeType = contentResolver.getType(pair.first) ?: "application/octet-stream"; builder.addFormDataPart("file$index", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
+                    }
                 }
                 builder.addFormDataPart("media", mediaArray.toString()); val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMediaGroup").post(builder.build()).build()
                 val res = uploadClient.newCall(req).execute(); tempFiles.forEach { it.delete() }
-                if (res.isSuccessful) { val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } } }
+                if (res.isSuccessful) {
+                    val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } }
+                }
             }
         }
     }
@@ -300,7 +317,10 @@ class ChatActivity : AppCompatActivity() {
         messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000); loadMessagesInternal()
     }
 
-    private fun setReplyBanner(message: MessageEntity) { findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"; findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE }
+    private fun setReplyBanner(message: MessageEntity) {
+        findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"; findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE
+    }
+
     private fun getStatusBarHeight(): Int { val res = resources.getIdentifier("status_bar_height", "dimen", "android"); return if (res > 0) resources.getDimensionPixelSize(res) else 0 }
 
     private suspend fun loadTitleAndType() {
@@ -317,8 +337,15 @@ class ChatActivity : AppCompatActivity() {
             if (chat != null) {
                 chatType = chat.type; val username = chat.username
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
-                val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"; "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"; else -> chat.type }
-                supportActionBar?.subtitle = if (chat.type == "private") "私聊" else typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                val typeStr = when (chat.type) { 
+                    "private" -> "私聊"
+                    "group" -> "私密群组"
+                    "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"
+                    "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"
+                    else -> chat.type 
+                }
+                if (chat.type == "private") supportActionBar?.subtitle = "私聊"
+                else supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
             }
         }
     }
@@ -333,7 +360,7 @@ class ChatActivity : AppCompatActivity() {
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
         val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
 
-        // 全部彻底调用你原本喜欢的矢量文件
+        // 全部彻底调用你原本的专属矢量文件，着色为 Primary，绝不发灰
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
             Triple("复读", R.drawable.ic_repeat, 2),
@@ -347,7 +374,7 @@ class ChatActivity : AppCompatActivity() {
         if (!message.editHistory.isNullOrEmpty() && message.editHistory != "[]") items.add(Triple("编辑历史", R.drawable.ic_history, 10))
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
-        if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) { items.add(0, Triple("保存", R.drawable.ic_save_media, 8)) }
+        if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) { items.add(0, Triple("保存", R.drawable.ic_save, 8)) }
 
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
 
@@ -387,10 +414,9 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun showReactionGridDialog(message: MessageEntity) {
-        val emojis = arrayOf("👍", "👎", "❤️", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "吻", "🖕", "😈", "睡", "哭", "🤓", "幽灵", "👨‍💻", "👀", "🎃", "见", "没见", "瞎")
+        val emojis = arrayOf("👍", "👎", "❤", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "💋", "🖕", "😈", "😴", "😭", "🤓", "👻", "👨‍💻", "👀", "🎃", "🙈", "😇", "🤝", "✍", "🤗", "🫡", "🎅", "🎄", "☃", "💅", "🤪", "🗿", "🆒", "💘", "🙉", "🦄", "😘", "💊", "😎", "👾", "🤷‍♂", "🤷", "🤷‍♀", "😡")
         val grid = GridLayout(this).apply { columnCount = 6; layoutParams = ViewGroup.LayoutParams(-1, -2); setPadding(32, 48, 32, 48) }
         val tvText = TypedValue(); theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tvText, true)
-        
         var dialog: androidx.appcompat.app.AlertDialog? = null
         emojis.forEach { emoji ->
             val tv = TextView(this).apply {
@@ -404,7 +430,6 @@ class ChatActivity : AppCompatActivity() {
                         val req = Request.Builder().url("https://api.telegram.org/bot$token/setMessageReaction").post(reactionJson.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
                         val res = ApiClient.getClient().newCall(req).execute()
                         if (res.isSuccessful) {
-                            // 立即写入本地数据库实现秒显
                             val oldArr = try { JSONArray(message.reactions ?: "[]") } catch(e:Exception){ JSONArray() }
                             var found = false
                             for (i in 0 until oldArr.length()) {

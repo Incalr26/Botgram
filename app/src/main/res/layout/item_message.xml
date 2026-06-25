@@ -151,7 +151,7 @@
                                         android:id="@+id/mediaOverlayIcon"
                                         android:layout_width="36dp"
                                         android:layout_height="36dp"
-                                        android:src="@android:drawable/stat_sys_download"
+                                        android:src="@drawable/ic_download_media"
                                         app:tint="@android:color/white" />
                                     <TextView
                                         android:id="@+id/mediaOverlaySize"
@@ -240,7 +240,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="end"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="2dp"
                 android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
         </LinearLayout>
