@@ -21,6 +21,8 @@ import com.incalr26.botgram.util.AvatarHelper
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
+import androidx.lifecycle.lifecycleScope // 以前有编译错误
+import kotlinx.coroutines.*
 
 class ChatInfoActivity : AppCompatActivity() {
 
