@@ -13,5 +13,8 @@ data class MessageEntity(
     val replyToJson: String? = null,
     val senderRole: String? = null,
     val senderTitle: String? = null,
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val isEdited: Boolean = false,
+    val editHistory: String? = null,
+    val reactions: String? = null
 )

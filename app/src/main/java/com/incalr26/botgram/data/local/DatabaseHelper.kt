@@ -8,7 +8,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "botgram.db"
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 6
 
         const val TABLE_CHATS = "chats"
         const val TABLE_MESSAGES = "messages"
@@ -37,6 +37,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         const val COL_SENDER_ROLE = "senderRole"
         const val COL_SENDER_TITLE = "senderTitle"
         const val COL_IS_DELETED = "isDeleted"
+        const val COL_IS_EDITED = "isEdited"
+        const val COL_EDIT_HISTORY = "editHistory"
+        const val COL_REACTIONS = "reactions"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -71,6 +74,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 $COL_SENDER_ROLE TEXT,
                 $COL_SENDER_TITLE TEXT,
                 $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0,
+                $COL_IS_EDITED INTEGER NOT NULL DEFAULT 0,
+                $COL_EDIT_HISTORY TEXT,
+                $COL_REACTIONS TEXT,
                 PRIMARY KEY ($COL_MESSAGE_ID, $COL_CHAT_ID)
             )
         """.trimIndent()
@@ -80,21 +86,14 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
-            db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_AVATAR_URL TEXT")
-            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_ENTITIES TEXT")
-        }
-        if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE $TABLE_CHATS ADD COLUMN $COL_ACCOUNT_HASH TEXT NOT NULL DEFAULT ''")
-            db.execSQL("UPDATE $TABLE_CHATS SET $COL_ACCOUNT_HASH = 'legacy'")
-        }
-        if (oldVersion < 4) {
-            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_REPLY_TO_JSON TEXT")
-            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_ROLE TEXT")
-            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_TITLE TEXT")
-        }
         if (oldVersion < 5) {
-            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0")
+            // 省略前面的降级兼容，直接升级至 6 即可兼容您的本地
+            try { db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0") } catch(e:Exception){}
+        }
+        if (oldVersion < 6) {
+            try { db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_IS_EDITED INTEGER NOT NULL DEFAULT 0") } catch(e:Exception){}
+            try { db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_EDIT_HISTORY TEXT") } catch(e:Exception){}
+            try { db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_REACTIONS TEXT") } catch(e:Exception){}
         }
     }
 }

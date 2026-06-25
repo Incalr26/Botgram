@@ -95,6 +95,14 @@
                             android:textSize="12sp"
                             android:textStyle="bold"
                             android:textColor="?attr/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/replyMeta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:textSize="10sp"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
                     </LinearLayout>
 
                     <TextView
@@ -237,6 +245,20 @@
                 android:textIsSelectable="true"
                 android:textColor="?attr/colorOnSurface"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
+                
+            <HorizontalScrollView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginTop="4dp">
+                <LinearLayout
+                    android:id="@+id/reactionsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone" />
+            </HorizontalScrollView>
+            
         </LinearLayout>
 
         <TextView

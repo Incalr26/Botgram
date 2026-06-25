@@ -33,6 +33,7 @@ import com.incalr26.botgram.util.AvatarHelper
 import com.incalr26.botgram.util.FileHelper
 import com.incalr26.botgram.util.MessageFormatter
 import kotlinx.coroutines.*
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
@@ -81,6 +82,8 @@ class MessageAdapter(
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
         
+        val reactionsContainer: LinearLayout = view.findViewById(R.id.reactionsContainer)
+        
         val container: LinearLayout = view as LinearLayout
         var boundMessageId: Long = 0L
         var loadJob: Job? = null
@@ -118,15 +121,8 @@ class MessageAdapter(
             holder.avatar.visibility = View.GONE
             holder.avatar.setImageDrawable(null)
             
-            // 绑定长按头像进行艾特的事件
-            holder.avatar.setOnLongClickListener {
-                onAvatarLongClick?.invoke(message)
-                true
-            }
-            holder.avatarFallback.setOnLongClickListener {
-                onAvatarLongClick?.invoke(message)
-                true
-            }
+            holder.avatar.setOnLongClickListener { onAvatarLongClick?.invoke(message); true }
+            holder.avatarFallback.setOnLongClickListener { onAvatarLongClick?.invoke(message); true }
         }
 
         val nameBuilder = StringBuilder(message.senderName ?: "未知")
@@ -271,7 +267,6 @@ class MessageAdapter(
             holder.fileNameText.text = doc.optString("file_name", if (isAudio) "音频消息" else "未知文件")
             holder.fileSizeText.text = formatSize(doc.optLong("file_size", 0L))
             
-            // 转发点击事件给 Activity 进行持久化与打开
             holder.fileContainer.setOnClickListener {
                 onFileClick?.invoke(message)
             }
@@ -312,6 +307,31 @@ class MessageAdapter(
             holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
         }
 
+        // 渲染表情回应
+        if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
+            try {
+                val arr = JSONArray(message.reactions)
+                if (arr.length() > 0) {
+                    holder.reactionsContainer.visibility = View.VISIBLE
+                    holder.reactionsContainer.removeAllViews()
+                    for (i in 0 until arr.length()) {
+                        val r = arr.getJSONObject(i)
+                        val tv = TextView(ctx).apply {
+                            text = "${r.getString("emoji")} ${r.getInt("count")}"
+                            textSize = 12f
+                            setTextColor(Color.GRAY)
+                            setBackgroundResource(R.drawable.reaction_bg)
+                            setPadding(16, 6, 16, 6)
+                            layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
+                        }
+                        holder.reactionsContainer.addView(tv)
+                    }
+                } else { holder.reactionsContainer.visibility = View.GONE }
+            } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
+        } else {
+            holder.reactionsContainer.visibility = View.GONE
+        }
+
         val now = Calendar.getInstance()
         val msgCal = Calendar.getInstance().apply { timeInMillis = message.date * 1000 }
         val dateStr = if (msgCal.get(Calendar.YEAR) == now.get(Calendar.YEAR)) {
@@ -319,7 +339,9 @@ class MessageAdapter(
         } else {
             SimpleDateFormat("yy年MM月dd日", Locale.getDefault()).format(Date(message.date * 1000))
         }
-        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}"
+        
+        val editStr = if (message.isEdited) " (已编辑)" else ""
+        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()
         if (!isOutgoing && prefs.getBoolean("use_real_avatar", true)) {

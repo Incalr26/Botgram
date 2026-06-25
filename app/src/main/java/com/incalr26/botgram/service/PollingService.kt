@@ -17,6 +17,7 @@ import com.incalr26.botgram.util.NetworkStateHolder
 import com.incalr26.botgram.util.NewMessageNotifier
 import kotlinx.coroutines.*
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -27,7 +28,6 @@ class PollingService : Service() {
     private lateinit var messageRepository: MessageRepository
     private var isRunning = false
 
-    // 缓存群成员信息：role (creator/administrator/member/restricted等), title (无标签存 "", 有标签存实际内容)
     data class MemberInfo(val role: String, val title: String)
     private val memberCache = ConcurrentHashMap<String, MemberInfo>()
 
@@ -57,7 +57,8 @@ class PollingService : Service() {
 
         while (isRunning) {
             try {
-                val url = "https://api.telegram.org/bot$token/getUpdates?offset=$offset&timeout=30"
+                // 增加 allowed_updates 抓取编辑和表情响应
+                val url = "https://api.telegram.org/bot$token/getUpdates?offset=$offset&timeout=30&allowed_updates=[\"message\",\"edited_message\",\"message_reaction_count\"]"
                 val request = Request.Builder().url(url).build()
                 val response = ApiClient.getClient().newCall(request).execute()
                 if (response.isSuccessful) {
@@ -68,11 +69,15 @@ class PollingService : Service() {
                         val results = json.getJSONArray("result")
                         for (i in 0 until results.length()) {
                             val update = results.getJSONObject(i)
-                            val updateId = update.getLong("update_id")
-                            offset = updateId + 1
+                            offset = update.getLong("update_id") + 1
                             prefs.edit().putLong("update_offset", offset).apply()
+                            
                             if (update.has("message")) {
                                 processMessage(update.getJSONObject("message"))
+                            } else if (update.has("edited_message")) {
+                                processEditedMessage(update.getJSONObject("edited_message"))
+                            } else if (update.has("message_reaction_count")) {
+                                processReactionCount(update.getJSONObject("message_reaction_count"))
                             }
                         }
                     }
@@ -85,6 +90,51 @@ class PollingService : Service() {
                 delay(5000)
             }
         }
+    }
+
+    private suspend fun processEditedMessage(msg: JSONObject) {
+        val chatId = msg.getJSONObject("chat").getLong("id")
+        val messageId = msg.getLong("message_id")
+        val existing = messageRepository.getMessage(chatId, messageId) ?: return
+        
+        val newText = extractMessageText(msg)
+        val historyArray = if (existing.editHistory != null) JSONArray(existing.editHistory) else JSONArray()
+        
+        if (existing.text != null && existing.text != newText) {
+            historyArray.put(existing.text) // 将旧文本压入历史
+        }
+        
+        val updated = existing.copy(
+            text = newText,
+            isEdited = true,
+            editHistory = historyArray.toString(),
+            rawJson = msg.toString(),
+            entities = if (msg.has("entities")) msg.getJSONArray("entities").toString() else existing.entities
+        )
+        messageRepository.insertMessage(updated)
+        NewMessageNotifier.newMessage.postValue(Unit)
+    }
+
+    private suspend fun processReactionCount(mrc: JSONObject) {
+        val chatId = mrc.getJSONObject("chat").getLong("id")
+        val messageId = mrc.getLong("message_id")
+        val reactions = mrc.getJSONArray("reactions")
+        
+        val reactArr = JSONArray()
+        for (i in 0 until reactions.length()) {
+            val r = reactions.getJSONObject(i)
+            val typeObj = r.getJSONObject("type")
+            if (typeObj.getString("type") == "emoji") {
+                val obj = JSONObject()
+                obj.put("emoji", typeObj.getString("emoji"))
+                obj.put("count", r.getInt("total_count"))
+                reactArr.put(obj)
+            }
+        }
+        
+        val existing = messageRepository.getMessage(chatId, messageId) ?: return
+        messageRepository.insertMessage(existing.copy(reactions = reactArr.toString()))
+        NewMessageNotifier.newMessage.postValue(Unit)
     }
 
     private suspend fun processMessage(msg: JSONObject) {
@@ -117,9 +167,7 @@ class PollingService : Service() {
                 senderTitle = if (cached.title.isEmpty()) null else cached.title
             } else {
                 try {
-                    val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
-                        .getString("bot_token", "") ?: ""
-                    
+                    val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE).getString("bot_token", "") ?: ""
                     val resultPair = withContext(Dispatchers.IO) {
                         withTimeoutOrNull(3000) {
                             val memberUrl = "https://api.telegram.org/bot$token/getChatMember?chat_id=$chatId&user_id=$senderId"
@@ -130,20 +178,16 @@ class PollingService : Service() {
                                 if (memberJson.getBoolean("ok")) {
                                     val result = memberJson.getJSONObject("result")
                                     val status = result.optString("status", "member")
-                                    
-                                    // 依据 Telegram 官方规范：仅当身份为 creator 或 administrator 时提取 custom_title
                                     val title = when (status) {
                                         "creator", "administrator" -> result.optString("custom_title", "").trim()
                                         else -> ""
                                     }
-                                    
                                     memberCache[cacheKey] = MemberInfo(status, title)
                                     Pair(status, if (title.isEmpty()) null else title)
                                 } else null
                             } else null
                         }
                     }
-                    
                     if (resultPair != null) {
                         senderRole = resultPair.first
                         senderTitle = resultPair.second
@@ -169,9 +213,8 @@ class PollingService : Service() {
         )
         chatRepository.insertOrUpdateChat(chatEntity)
 
-        val messageId = msg.getLong("message_id")
         val messageEntity = MessageEntity(
-            messageId = messageId,
+            messageId = msg.getLong("message_id"),
             chatId = chatId,
             senderUserId = senderId,
             senderName = senderName,
@@ -194,16 +237,11 @@ class PollingService : Service() {
             val members = msg.getJSONArray("new_chat_members")
             val names = mutableListOf<String>()
             for (i in 0 until members.length()) {
-                val user = members.getJSONObject(i)
-                names.add(user.optString("first_name", "用户"))
+                names.add(members.getJSONObject(i).optString("first_name", "用户"))
             }
             return names.joinToString(", ") + " 加入了群组"
         }
-        if (msg.has("left_chat_member")) {
-            val user = msg.getJSONObject("left_chat_member")
-            val name = user.optString("first_name", "用户")
-            return "$name 离开了群组"
-        }
+        if (msg.has("left_chat_member")) return "${msg.getJSONObject("left_chat_member").optString("first_name", "用户")} 离开了群组"
         if (msg.has("group_chat_created")) return "群组已创建"
         if (msg.has("new_chat_title")) return "群组名称已更改为：“${msg.getString("new_chat_title")}”"
         if (msg.has("text")) return msg.getString("text")
@@ -213,8 +251,7 @@ class PollingService : Service() {
 
         return when {
             msg.has("sticker") -> {
-                val sticker = msg.getJSONObject("sticker")
-                val emoji = sticker.optString("emoji", "")
+                val emoji = msg.getJSONObject("sticker").optString("emoji", "")
                 if (emoji.isNotEmpty()) "贴纸 $emoji$captionSuffix" else "贴纸$captionSuffix"
             }
             msg.has("photo") -> "[图片]$captionSuffix"
@@ -241,10 +278,5 @@ class PollingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        isRunning = false
-        serviceScope.cancel()
-        super.onDestroy()
-    }
+    override fun onDestroy() { isRunning = false; serviceScope.cancel(); super.onDestroy() }
 }

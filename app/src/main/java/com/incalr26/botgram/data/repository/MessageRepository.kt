@@ -30,11 +30,47 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
                 replyToJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REPLY_TO_JSON)),
                 senderRole = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_ROLE)),
                 senderTitle = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_TITLE)),
-                isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_DELETED)) == 1
+                isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_DELETED)) == 1,
+                isEdited = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_EDITED)) == 1,
+                editHistory = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_EDIT_HISTORY)),
+                reactions = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REACTIONS))
             ))
         }
         cursor.close()
         messages
+    }
+
+    suspend fun getMessage(chatId: Long, messageId: Long): MessageEntity? = withContext(Dispatchers.IO) {
+        val db = dbHelper.readableDatabase
+        val cursor = db.query(
+            DatabaseHelper.TABLE_MESSAGES, null,
+            "${DatabaseHelper.COL_CHAT_ID} = ? AND ${DatabaseHelper.COL_MESSAGE_ID} = ?",
+            arrayOf(chatId.toString(), messageId.toString()),
+            null, null, null
+        )
+        var message: MessageEntity? = null
+        if (cursor.moveToFirst()) {
+            message = MessageEntity(
+                messageId = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_MESSAGE_ID)),
+                chatId = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_CHAT_ID)),
+                senderUserId = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_USER_ID)),
+                senderName = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_NAME)),
+                text = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_TEXT)),
+                date = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_DATE)),
+                isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_OUTGOING)) == 1,
+                rawJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_RAW_JSON)),
+                entities = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_ENTITIES)),
+                replyToJson = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REPLY_TO_JSON)),
+                senderRole = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_ROLE)),
+                senderTitle = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_SENDER_TITLE)),
+                isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_DELETED)) == 1,
+                isEdited = cursor.getInt(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_IS_EDITED)) == 1,
+                editHistory = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_EDIT_HISTORY)),
+                reactions = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COL_REACTIONS))
+            )
+        }
+        cursor.close()
+        message
     }
 
     suspend fun insertMessage(message: MessageEntity) = withContext(Dispatchers.IO) {
@@ -53,6 +89,9 @@ class MessageRepository(private val dbHelper: DatabaseHelper) {
             put(DatabaseHelper.COL_SENDER_ROLE, message.senderRole)
             put(DatabaseHelper.COL_SENDER_TITLE, message.senderTitle)
             put(DatabaseHelper.COL_IS_DELETED, if (message.isDeleted) 1 else 0)
+            put(DatabaseHelper.COL_IS_EDITED, if (message.isEdited) 1 else 0)
+            put(DatabaseHelper.COL_EDIT_HISTORY, message.editHistory)
+            put(DatabaseHelper.COL_REACTIONS, message.reactions)
         }
         db.insertWithOnConflict(DatabaseHelper.TABLE_MESSAGES, null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
     }
