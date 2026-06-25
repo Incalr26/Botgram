@@ -24,29 +24,30 @@ import org.json.JSONObject
 
 class ChatInfoActivity : AppCompatActivity() {
 
+    private var chatId: Long = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_chat_info)
 
+        chatId = intent.getLongExtra("chatId", 0)
+        if (chatId == 0L) { finish(); return }
+
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        val chatId = intent.getLongExtra("chatId", 0L)
-        if (chatId == 0L) { finish(); return }
-
         val appBarLayout = findViewById<AppBarLayout>(R.id.appBarLayout)
         val miniAvatar = findViewById<ImageView>(R.id.miniToolbarAvatar)
-        
-        // 点击小头像自动展开
         miniAvatar.setOnClickListener { appBarLayout.setExpanded(true, true) }
 
         appBarLayout.addOnOffsetChangedListener { appBar, verticalOffset ->
-            if (Math.abs(verticalOffset) >= appBar.totalScrollRange) miniAvatar.visibility = View.VISIBLE else miniAvatar.visibility = View.GONE
+            if (Math.abs(verticalOffset) >= appBar.totalScrollRange - 50) miniAvatar.visibility = View.VISIBLE 
+            else miniAvatar.visibility = View.GONE
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE).getString("bot_token", "") ?: ""
             val req = Request.Builder().url("https://api.telegram.org/bot$token/getChat?chat_id=$chatId").build()
             try {
@@ -69,7 +70,7 @@ class ChatInfoActivity : AppCompatActivity() {
 
     private fun renderUI(chat: JSONObject) {
         val title = chat.optString("title").takeIf { it.isNotEmpty() } ?: chat.optString("first_name") + " " + chat.optString("last_name")
-        findViewById<CollapsingToolbarLayout>(R.id.collapsingToolbar).title = title
+        findViewById<CollapsingToolbarLayout>(R.id.collapsingToolbar).title = title.trim()
 
         val container = findViewById<LinearLayout>(R.id.infoContentContainer)
         
@@ -92,10 +93,10 @@ class ChatInfoActivity : AppCompatActivity() {
         }
 
         val basicInfo = mutableListOf<Pair<String, String>>()
-        basicInfo.add("ID" to chat.getLong("id").toString())
+        basicInfo.add("Chat ID" to chat.getLong("id").toString())
         val type = chat.getString("type")
         val username = chat.optString("username")
-        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
+        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开超级群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
         if (username.isNotEmpty()) {
             if (type == "private") basicInfo.add("用户名" to "@$username") else basicInfo.add("公开链接" to "https://t.me/$username")
         }
@@ -103,11 +104,25 @@ class ChatInfoActivity : AppCompatActivity() {
 
         val descInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("bio")) descInfo.add("简介" to chat.getString("bio"))
-        if (chat.has("description")) descInfo.add("简介" to chat.getString("description")) // 自动统称为简介
+        if (chat.has("description")) descInfo.add("简介" to chat.getString("description"))
         if (chat.has("member_count")) descInfo.add("成员总数" to "${chat.getInt("member_count")} 人")
         if (chat.has("invite_link")) descInfo.add("专属邀请链接" to chat.getString("invite_link"))
-        if (chat.has("linked_chat_id")) descInfo.add("关联讨论组 ID" to chat.getLong("linked_chat_id").toString())
+        if (chat.has("linked_chat_id")) descInfo.add("关联讨论区 ID" to chat.getLong("linked_chat_id").toString())
         addCard("详细资料", descInfo)
+
+        val permObj = chat.optJSONObject("permissions")
+        if (permObj != null) {
+            val permList = mutableListOf<Pair<String, String>>()
+            val pMap = mapOf(
+                "can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件",
+                "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_video_notes" to "发送视频留言",
+                "can_send_voice_notes" to "发送语音", "can_send_polls" to "发送投票", "can_send_other_messages" to "发送其他消息",
+                "can_add_web_page_previews" to "添加网页预览", "can_change_info" to "修改群信息", "can_invite_users" to "邀请用户",
+                "can_pin_messages" to "置顶消息", "can_manage_topics" to "管理话题"
+            )
+            pMap.forEach { (key, cnName) -> if (permObj.has(key)) permList.add("$cnName\n($key)" to if (permObj.getBoolean(key)) "允许" else "禁止") }
+            addCard("成员权限设置", permList)
+        }
 
         val extraInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("pinned_message")) extraInfo.add("当前置顶消息" to chat.getJSONObject("pinned_message").optString("text", "[媒体/复杂消息]"))
@@ -121,7 +136,7 @@ class ChatInfoActivity : AppCompatActivity() {
         if (chat.has("available_reactions")) {
             val arr = chat.getJSONArray("available_reactions"); val reactions = mutableListOf<String>()
             for (i in 0 until arr.length()) { val r = arr.getJSONObject(i); if (r.optString("type") == "emoji") reactions.add(r.getString("emoji")) }
-            if (reactions.isNotEmpty()) extraInfo.add("可用回应" to reactions.joinToString(" "))
+            if (reactions.isNotEmpty()) extraInfo.add("可用表情回应" to reactions.joinToString(" "))
         }
         addCard("系统与高级设置", extraInfo)
     }

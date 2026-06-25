@@ -218,9 +218,9 @@ class ChatActivity : AppCompatActivity() {
         for ((index, item) in pendingUploads.withIndex()) {
             val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams((64 * density).toInt(), (64 * density).toInt()).apply { marginEnd = (8 * density).toInt() } }
             val card = MaterialCardView(this).apply { layoutParams = FrameLayout.LayoutParams((56 * density).toInt(), (56 * density).toInt()).apply { gravity = Gravity.BOTTOM or Gravity.START }; radius = 8 * density; setCardBackgroundColor(Color.parseColor("#E0E0E0")); cardElevation = 0f }
-            val icon = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); when (item.second) { "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(item.first) } else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(tv.data); when (item.second) { "video" -> setImageResource(android.R.drawable.presence_video_online); else -> setImageResource(R.drawable.ic_file_document) } } } }
+            val icon = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); when (item.second) { "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(item.first) } else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(tv.data); when (item.second) { "video" -> setImageResource(R.drawable.ic_video); "audio" -> setImageResource(R.drawable.ic_audio); else -> setImageResource(R.drawable.ic_file) } } } }
             card.addView(icon)
-            val closeBtn = ImageButton(this).apply { layoutParams = FrameLayout.LayoutParams((20 * density).toInt(), (20 * density).toInt()).apply { gravity = Gravity.TOP or Gravity.END }; setImageResource(android.R.drawable.ic_menu_close_clear_cancel); background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.avatar_bg); setColorFilter(Color.WHITE); setPadding(8, 8, 8, 8); scaleType = ImageView.ScaleType.FIT_CENTER; setOnClickListener { pendingUploads.removeAt(index); updatePreviewUI(); if (pendingUploads.isEmpty() && findViewById<EditText>(R.id.messageInput).text.toString().trim().isEmpty()) { val btn = findViewById<ImageButton>(R.id.sendButton); btn.isEnabled = false; btn.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN); btn.alpha = 0.5f } } }
+            val closeBtn = ImageButton(this).apply { layoutParams = FrameLayout.LayoutParams((20 * density).toInt(), (20 * density).toInt()).apply { gravity = Gravity.TOP or Gravity.END }; setImageResource(R.drawable.ic_close); background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.avatar_bg); setColorFilter(Color.WHITE); setPadding(8, 8, 8, 8); scaleType = ImageView.ScaleType.FIT_CENTER; setOnClickListener { pendingUploads.removeAt(index); updatePreviewUI(); if (pendingUploads.isEmpty() && findViewById<EditText>(R.id.messageInput).text.toString().trim().isEmpty()) { val btn = findViewById<ImageButton>(R.id.sendButton); btn.isEnabled = false; btn.setColorFilter(Color.parseColor("#9E9E9E"), PorterDuff.Mode.SRC_IN); btn.alpha = 0.5f } } }
             frame.addView(card); frame.addView(closeBtn); previewList.addView(frame)
         }
     }
@@ -228,19 +228,20 @@ class ChatActivity : AppCompatActivity() {
     private fun showAttachMenu(anchor: View) {
         val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background); elevation = 12f * resources.displayMetrics.density; clipToOutline = true }
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
+        val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
         
+        // 使用你原本喜欢的定制无发灰矢量图标
         val items = listOf(
-            Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
-            Triple("发送视频", android.R.drawable.presence_video_online, 2),
-            Triple("发送音频", android.R.drawable.ic_media_play, 4),
-            Triple("发送文件", R.drawable.ic_file_document, 3)
+            Triple("发送图片", R.drawable.ic_photo, 1),
+            Triple("发送视频", R.drawable.ic_video, 2),
+            Triple("发送音频", R.drawable.ic_audio, 4),
+            Triple("发送文件", R.drawable.ic_file, 3)
         )
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
 
         items.forEach { (title, iconRes, action) ->
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            // 彻底去除发灰滤镜：不使用 setColorFilter，保留原生图标颜色！
-            itemView.findViewById<ImageView>(R.id.menu_icon).apply { layoutParams = LinearLayout.LayoutParams((24 * resources.displayMetrics.density).toInt(), (24 * resources.displayMetrics.density).toInt()); setImageResource(iconRes) }
+            itemView.findViewById<ImageView>(R.id.menu_icon).apply { layoutParams = LinearLayout.LayoutParams((24 * resources.displayMetrics.density).toInt(), (24 * resources.displayMetrics.density).toInt()); setImageResource(iconRes); setColorFilter(tvColor.data) }
             itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(tvText.data) }
             itemView.setOnClickListener { popupWindow.dismiss(); when (action) { 1 -> pickImagesLauncher.launch("image/*"); 2 -> pickVideosLauncher.launch("video/*"); 3 -> pickFilesLauncher.launch("*/*"); 4 -> pickAudioLauncher.launch("audio/*") } }
             container.addView(itemView)
@@ -251,7 +252,8 @@ class ChatActivity : AppCompatActivity() {
 
     private fun uploadMediaAndSend(caption: String) {
         if (pendingUploads.isEmpty()) return
-        Toast.makeText(this, "正在上传...", Toast.LENGTH_SHORT).show(); val uploadsSnapshot = pendingUploads.toList()
+        Toast.makeText(this, "正在后台上传...", Toast.LENGTH_SHORT).show()
+        val uploadsSnapshot = pendingUploads.toList()
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val uploadClient = ApiClient.getClient().newBuilder().connectTimeout(60, TimeUnit.SECONDS).writeTimeout(12, TimeUnit.HOURS).readTimeout(12, TimeUnit.HOURS).build()
@@ -279,7 +281,9 @@ class ChatActivity : AppCompatActivity() {
                 }
                 builder.addFormDataPart("media", mediaArray.toString()); val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMediaGroup").post(builder.build()).build()
                 val res = uploadClient.newCall(req).execute(); tempFiles.forEach { it.delete() }
-                if (res.isSuccessful) { val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } } }
+                if (res.isSuccessful) {
+                    val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } }
+                }
             }
         }
     }
@@ -307,8 +311,11 @@ class ChatActivity : AppCompatActivity() {
 
         withContext(Dispatchers.Main) {
             if (chat != null) {
-                chatType = chat.type; val username = chat.username
+                chatType = chat.type
+                val username = chat.username
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
+                
+                // 完美还原逻辑：判定有无 username 精确断定公开与私密
                 val typeStr = when (chat.type) { 
                     "private" -> "私聊"
                     "group" -> "私密群组"
@@ -316,7 +323,12 @@ class ChatActivity : AppCompatActivity() {
                     "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"
                     else -> chat.type 
                 }
-                supportActionBar?.subtitle = if (chat.type == "private") "私聊" else typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                
+                if (chat.type == "private") {
+                    supportActionBar?.subtitle = "私聊"
+                } else {
+                    supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                }
             }
         }
     }
@@ -330,14 +342,14 @@ class ChatActivity : AppCompatActivity() {
         val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background); elevation = 12f * resources.displayMetrics.density; clipToOutline = true }
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
 
-        // 百分百原版图标替换：严格使用你原本的长按图标名字
+        // 彻底回退至你最初优美的原版图标
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_repeat, 2),
+            Triple("复读", R.drawable.ic_plus_one_outline, 2),
             Triple("转发式复读", R.drawable.ic_repeat, 6),
             Triple("转发给...", R.drawable.ic_send, 7),
             Triple("回复", R.drawable.ic_reply, 4),
-            Triple("添加表情回应", android.R.drawable.ic_menu_emoticons, 11) // 使用标准笑脸图标
+            Triple("添加表情回应", R.drawable.ic_smile, 11) // 使用新绘制的笑脸
         )
         if (chatType != "private") items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
         if (message.isOutgoing) { items.add(Triple("编辑", R.drawable.ic_edit, 9)); items.add(Triple("撤回", R.drawable.ic_revoke, 3)) }
@@ -350,7 +362,7 @@ class ChatActivity : AppCompatActivity() {
 
         items.forEach { (title, iconRes, action) ->
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            // 彻底去除发灰滤镜：不加 setColorFilter
+            // 不再使用 setColorFilter 让图标发灰，保留图标绝对原生质感！
             itemView.findViewById<ImageView>(R.id.menu_icon).apply { setImageResource(iconRes) }
             itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(tvText.data) }
             itemView.setOnClickListener { handleMenuAction(action, message); popupWindow.dismiss() }
@@ -385,14 +397,10 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    // Material You 网格设计：高优先级的几十种表情
+    // Material You 网格化表情回应，无边框
     private fun showReactionGridDialog(msgId: Long) {
         val emojis = arrayOf("🤔", "🤯", "😱", "😭", "😂", "🤣", "👍", "👎", "❤️", "🔥", "👏", "🎉", "💩", "😢", "😍", "😡", "🤮", "🙏", "👌", "👀", "💯", "🥱", "🤡", "鸽")
-        val grid = GridLayout(this).apply {
-            columnCount = 6
-            layoutParams = ViewGroup.LayoutParams(-1, -2)
-            setPadding(32, 48, 32, 48)
-        }
+        val grid = GridLayout(this).apply { columnCount = 6; layoutParams = ViewGroup.LayoutParams(-1, -2); setPadding(32, 48, 32, 48) }
         val tvText = TypedValue(); theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tvText, true)
         
         var dialog: androidx.appcompat.app.AlertDialog? = null
@@ -449,22 +457,6 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveMedia(message: MessageEntity) {
-        Toast.makeText(this, "开始下载...", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch(Dispatchers.IO + crashHandler) {
-            val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
-            var fileId = ""; var subDir = ""; var fName = "${chatId}_${message.messageId}_${System.currentTimeMillis()}"
-            if (rawObj.has("photo")) { val arr = rawObj.getJSONArray("photo"); fileId = arr.getJSONObject(arr.length() - 1).getString("file_id"); subDir = "Images"; fName += ".jpg"
-            } else if (rawObj.has("sticker")) { fileId = rawObj.getJSONObject("sticker").getString("file_id"); subDir = "Stickers"; fName += ".webp"
-            } else if (rawObj.has("video")) { val vid = rawObj.getJSONObject("video"); fileId = vid.getString("file_id"); subDir = "Videos"; fName = vid.optString("file_name", "$fName.mp4")
-            } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) { val isAudio = rawObj.has("audio") || rawObj.has("voice"); val doc = if (isAudio) (if (rawObj.has("audio")) rawObj.getJSONObject("audio") else rawObj.getJSONObject("voice")) else rawObj.getJSONObject("document"); fileId = doc.getString("file_id"); subDir = if (isAudio) "Audio" else "Files"; val origName = doc.optString("file_name", ""); if (origName.isNotEmpty() && origName.contains(".")) fName += ".${origName.substringAfterLast('.')}" }
-
-            val url = FileHelper.getTelegramFileUrl(fileId, token)
-            if (!url.isNullOrEmpty()) { val success = FileHelper.saveMediaToStorage(this@ChatActivity, url, subDir, fName); withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, if (success) "已保存" else "保存失败", Toast.LENGTH_SHORT).show() } }
-        }
-    }
-
     private fun handleRepeatAction(message: MessageEntity, isForward: Boolean) {
         val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
         if (prefs.getBoolean("repeat_confirm", true)) { MaterialAlertDialogBuilder(this).setTitle(if (isForward) "转发式复读确认" else "复读确认").setMessage(if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？").setPositiveButton("确定") { _, _ -> if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null) }.setNegativeButton("取消", null).show()
@@ -483,7 +475,13 @@ class ChatActivity : AppCompatActivity() {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val jsonBody = JSONObject().apply { put("chat_id", targetChatId); put("from_chat_id", message.chatId); put("message_id", message.messageId) }
             val req = Request.Builder().url("https://api.telegram.org/bot$token/forwardMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build(); val res = ApiClient.getClient().newCall(req).execute()
-            if (res.isSuccessful) { val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val result = msg.getJSONObject("result"); val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = targetChatId, senderUserId = null, senderName = "我", text = result.optString("text", "[媒体/转发消息]"), date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = null, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null); messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000); if (targetChatId == chatId) loadMessagesInternal() else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show() } } }
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result"); val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = targetChatId, senderUserId = null, senderName = "我", text = result.optString("text", "[媒体/转发消息]"), date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = null, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null)
+                    messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(targetChatId, messageEntity.text ?: "", messageEntity.date * 1000); if (targetChatId == chatId) loadMessagesInternal() else withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "已转发", Toast.LENGTH_SHORT).show() }
+                }
+            }
         }
     }
 
@@ -501,7 +499,13 @@ class ChatActivity : AppCompatActivity() {
             val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); put("parse_mode", "Markdown"); replyTo?.let { put("reply_to_message_id", it) } }
             var res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute()
             if (!res.isSuccessful) { jsonBody.remove("parse_mode"); res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute() }
-            if (res.isSuccessful) { val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val result = msg.getJSONObject("result"); var replyToJson: String? = null; if (replyTo != null) { try { val repliedMsg = messageRepository.getMessages(chatId).find { it.messageId == replyTo }; replyToJson = repliedMsg?.rawJson } catch (_: Exception) {} }; val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = text, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = replyToJson, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null); messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000); loadMessagesInternal() } }
+            if (res.isSuccessful) {
+                val msg = JSONObject(res.body?.string() ?: "")
+                if (msg.getBoolean("ok")) {
+                    val result = msg.getJSONObject("result"); var replyToJson: String? = null; if (replyTo != null) { try { val repliedMsg = messageRepository.getMessages(chatId).find { it.messageId == replyTo }; replyToJson = repliedMsg?.rawJson } catch (_: Exception) {} }
+                    val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = text, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = replyToJson, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null); messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000); loadMessagesInternal()
+                }
+            }
         }
     }
 

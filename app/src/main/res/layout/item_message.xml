@@ -9,7 +9,6 @@
     android:paddingTop="4dp"
     android:paddingBottom="4dp">
 
-    <!-- 进群/退群等系统消息展示区 -->
     <TextView
         android:id="@+id/systemMessageText"
         android:layout_width="wrap_content"
@@ -107,7 +106,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 完美的媒体气泡：遮罩将充满整个 FrameLayout -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/mediaContainer"
                 android:layout_width="wrap_content"
@@ -115,48 +113,47 @@
                 android:layout_marginBottom="6dp"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="0dp"
-                app:cardBackgroundColor="#2A2A2A"
+                app:cardBackgroundColor="@android:color/transparent"
                 android:visibility="gone">
                 <FrameLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="150dp"
                     android:minHeight="150dp">
+                    
                     <ImageView
                         android:id="@+id/mediaImage"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:adjustViewBounds="true"
-                        android:maxHeight="300dp"
-                        android:scaleType="centerInside" />
+                        android:maxWidth="260dp"
+                        android:maxHeight="320dp" />
                     
-                    <!-- 占满整个父容器的遮罩层 -->
-                    <FrameLayout
+                    <LinearLayout
                         android:id="@+id/mediaOverlay"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="#90000000">
-                        <LinearLayout
+                        android:background="#88000000"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+                        
+                        <ImageView
+                            android:id="@+id/mediaOverlayIcon"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:src="@android:drawable/stat_sys_download"
+                            app:tint="@android:color/white" />
+                            
+                        <TextView
+                            android:id="@+id/mediaOverlaySize"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:gravity="center"
-                            android:orientation="vertical">
-                            <ImageView
-                                android:id="@+id/mediaOverlayIcon"
-                                android:layout_width="36dp"
-                                android:layout_height="36dp"
-                                android:src="@android:drawable/stat_sys_download"
-                                app:tint="@android:color/white" />
-                            <TextView
-                                android:id="@+id/mediaOverlaySize"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@android:color/white"
-                                android:textSize="12sp"
-                                android:layout_marginTop="4dp" />
-                        </LinearLayout>
-                    </FrameLayout>
+                            android:textColor="@android:color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
                 </FrameLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -214,13 +211,18 @@
                 android:autoLink="web"
                 android:linksClickable="true" />
 
-            <LinearLayout
-                android:id="@+id/reactionsContainer"
+            <HorizontalScrollView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="6dp"
-                android:visibility="gone" />
+                android:scrollbars="none"
+                android:layout_marginTop="6dp">
+                <LinearLayout
+                    android:id="@+id/reactionsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone" />
+            </HorizontalScrollView>
 
             <TextView
                 android:id="@+id/messageInfo"
