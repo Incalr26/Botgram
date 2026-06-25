@@ -47,25 +47,36 @@ class ChatInfoActivity : AppCompatActivity() {
             else miniAvatar.visibility = View.GONE
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
+        lifecycleScope.launch(Dispatchers.Main) {
             val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE).getString("bot_token", "") ?: ""
-            val req = Request.Builder().url("https://api.telegram.org/bot$token/getChat?chat_id=$chatId").build()
-            try {
-                val res = ApiClient.getClient().newCall(req).execute()
-                if (res.isSuccessful) {
-                    val json = JSONObject(res.body?.string() ?: "")
-                    if (json.getBoolean("ok")) withContext(Dispatchers.Main) { renderUI(json.getJSONObject("result")) }
-                }
-            } catch (e: Exception) {}
             
-            val avatarUrl = AvatarHelper.getUserAvatar(chatId)
+            // 将网络请求移入 IO 线程
+            val resultJson = withContext(Dispatchers.IO) {
+                val req = Request.Builder().url("https://api.telegram.org/bot$token/getChat?chat_id=$chatId").build()
+                try {
+                    val res = ApiClient.getClient().newCall(req).execute()
+                    if (res.isSuccessful) {
+                        val body = res.body?.string()
+                        if (!body.isNullOrEmpty()) JSONObject(body) else null
+                    } else null
+                } catch (e: Exception) { null }
+            }
+
+            if (resultJson != null && resultJson.getBoolean("ok")) {
+                renderUI(resultJson.getJSONObject("result"))
+            }
+
+            // 获取头像
+            val avatarUrl = withContext(Dispatchers.IO) { AvatarHelper.getUserAvatar(chatId) }
             if (!avatarUrl.isNullOrEmpty()) {
-                withContext(Dispatchers.Main) {
-                    findViewById<ImageView>(R.id.chatInfoAvatar).load(avatarUrl) { crossfade(true) }
-                    miniAvatar.load(avatarUrl) { crossfade(true); transformations(CircleCropTransformation()) }
+                findViewById<ImageView>(R.id.chatInfoAvatar).load(avatarUrl) { crossfade(true) }
+                findViewById<ImageView>(R.id.miniToolbarAvatar).load(avatarUrl) { 
+                    crossfade(true)
+                    transformations(CircleCropTransformation()) 
                 }
             }
         }
+        //修复编译报错问题↑
     }
 
     private fun renderUI(chat: JSONObject) {

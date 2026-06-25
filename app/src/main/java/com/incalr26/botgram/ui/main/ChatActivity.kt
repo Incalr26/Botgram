@@ -511,4 +511,18 @@ class ChatActivity : AppCompatActivity() {
 
     private fun gotoCrash(throwable: Throwable) { startActivity(Intent(this, CrashActivity::class.java).apply { putExtra("stack_trace", android.util.Log.getStackTraceString(throwable)); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }); finish() }
     override fun onOptionsItemSelected(item: MenuItem): Boolean { if (item.itemId == android.R.id.home) { finish(); return true }; return super.onOptionsItemSelected(item) }
+    //修复编译问题↓
+        private fun saveMedia(message: MessageEntity) {
+        Toast.makeText(this, "正在尝试保存...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val fileCachePrefs = getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
+            val savedPath = fileCachePrefs.getString(message.messageId.toString(), null)
+            if (savedPath != null && File(savedPath).exists()) {
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "文件已在本地: $savedPath", Toast.LENGTH_LONG).show() }
+            } else {
+                handleFileClick(message) // 调用现有的下载逻辑
+            }
+        }
+    }
+
 }
