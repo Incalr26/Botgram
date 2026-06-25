@@ -340,7 +340,7 @@ class MessageAdapter(
             SimpleDateFormat("yy年MM月dd日", Locale.getDefault()).format(Date(message.date * 1000))
         }
         
-        val editStr = if (message.isEdited) " (已编辑)" else ""
+        val editStr = if (message.isEdited) { val ed = try { org.json.JSONObject(message.rawJson ?: "{}").optLong("edit_date", 0L) } catch(e:Exception){0L}; if (ed > 0) " [已编辑 ${timeFormat.format(java.util.Date(ed * 1000))}]" else " [已编辑]" } else ""
         holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()

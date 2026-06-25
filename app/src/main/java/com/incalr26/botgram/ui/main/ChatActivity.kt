@@ -46,6 +46,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class ChatActivity : AppCompatActivity() {
@@ -86,7 +89,6 @@ class ChatActivity : AppCompatActivity() {
             val toolbar: androidx.appcompat.widget.Toolbar = findViewById(R.id.toolbar)
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            supportActionBar?.setDisplayShowHomeEnabled(true)
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
 
             toolbar.setOnClickListener {
@@ -123,9 +125,8 @@ class ChatActivity : AppCompatActivity() {
             fun updateSendButtonState() {
                 val hasText = messageInput.text.toString().trim().isNotEmpty()
                 val hasMedia = pendingUploads.isNotEmpty()
-                val typedValue = TypedValue()
-                theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
-                val primaryColor = typedValue.data
+                val tv = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tv, true)
+                val primaryColor = tv.data
 
                 if (hasText || hasMedia) {
                     sendButton.isEnabled = true
@@ -150,7 +151,7 @@ class ChatActivity : AppCompatActivity() {
                 if (imm.isActive(messageInput)) {
                     imm.hideSoftInputFromWindow(messageInput.windowToken, 0)
                     attachButton.postDelayed({ showAttachMenu(attachButton) }, 250)
-                } else { showAttachMenu(attachButton) }
+                } else showAttachMenu(attachButton)
             }
 
             findViewById<ImageButton>(R.id.cancelReply).setOnClickListener {
@@ -192,18 +193,13 @@ class ChatActivity : AppCompatActivity() {
         val username = from.optString("username", "")
         val input = findViewById<EditText>(R.id.messageInput)
         val start = Math.max(input.selectionStart, 0)
-        
-        // 彻底解决名字内联无法发送问题：对非法 markdown 字符全部剥离
-        val mentionText = if (username.isNotEmpty()) {
-            "@$username "
-        } else {
+        val mentionText = if (username.isNotEmpty()) "@$username " else {
             val fn = from.optString("first_name", "")
             val ln = from.optString("last_name", "")
             val rawName = listOf(fn, ln).filter { it.isNotEmpty() }.joinToString(" ")
             val safeName = rawName.replace("[", "").replace("]", "").replace("(", "").replace(")", "").replace("_", "")
             "[$safeName](tg://user?id=${message.senderUserId}) "
         }
-        
         input.text.insert(start, mentionText)
         input.requestFocus()
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
@@ -286,7 +282,7 @@ class ChatActivity : AppCompatActivity() {
                 when (type) {
                     "photo" -> { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(uri) }
                     else -> { scaleType = ImageView.ScaleType.FIT_CENTER; setPadding(24, 24, 24, 24); setColorFilter(primaryColor) 
-                        when (type) { "video" -> setImageResource(R.drawable.ic_video); "audio" -> setImageResource(R.drawable.ic_audio); else -> setImageResource(R.drawable.ic_file_document) }
+                        when (type) { "video" -> setImageResource(android.R.drawable.ic_media_play); else -> setImageResource(R.drawable.ic_file_document) }
                     }
                 }
             }
@@ -305,11 +301,10 @@ class ChatActivity : AppCompatActivity() {
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
         val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
         
-        // 彻底解决图标资源不匹配导致的编译崩溃，改用内置生成矢量
         val items = listOf(
-            Triple("发送图片", R.drawable.ic_image, 1),
-            Triple("发送视频", R.drawable.ic_video, 2),
-            Triple("发送音频", R.drawable.ic_audio, 4),
+            Triple("发送图片", android.R.drawable.ic_menu_gallery, 1),
+            Triple("发送视频", android.R.drawable.ic_menu_camera, 2),
+            Triple("发送音频", android.R.drawable.ic_media_play, 4),
             Triple("发送文件", R.drawable.ic_file_document, 3)
         )
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
@@ -327,11 +322,16 @@ class ChatActivity : AppCompatActivity() {
 
     private fun uploadMediaAndSend(caption: String) {
         if (pendingUploads.isEmpty()) return
-        Toast.makeText(this, "正在上传发送...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "正在后台上传...", Toast.LENGTH_SHORT).show()
         val uploadsSnapshot = pendingUploads.toList()
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val uploadClient = ApiClient.getClient().newBuilder().connectTimeout(30, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
+            // 解决大视频上传失败不显示的史诗级 Timeout (12个小时)
+            val uploadClient = ApiClient.getClient().newBuilder()
+                .connectTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(12, TimeUnit.HOURS)
+                .readTimeout(12, TimeUnit.HOURS)
+                .build()
 
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first(); val type = item.second; val file = FileHelper.uriToTempFile(this@ChatActivity, item.first) ?: return@launch
@@ -397,10 +397,20 @@ class ChatActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             if (chat != null) {
                 chatType = chat.type
-                supportActionBar?.title = if (chat.type == "private") chat.firstName ?: chat.username ?: "私聊" else chat.title ?: "群组"
+                val username = chat.username
+                supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
                 val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "群组"; "supergroup" -> "超级群组"; "channel" -> "频道"; else -> chat.type }
-                if (chat.type == "private") supportActionBar?.subtitle = "私聊"
-                else supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                
+                // 完美解决顶栏链接识别
+                if (chat.type == "private") {
+                    supportActionBar?.subtitle = if (!username.isNullOrEmpty()) "@$username" else "私聊"
+                } else {
+                    if (!username.isNullOrEmpty()) {
+                        supportActionBar?.subtitle = "https://t.me/$username"
+                    } else {
+                        supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
+                    }
+                }
             }
         }
     }
@@ -472,7 +482,7 @@ class ChatActivity : AppCompatActivity() {
                 input.setSelection(input.text.length)
                 
                 val tv = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tv, true)
-                findViewById<ImageButton>(R.id.sendButton).apply { setImageResource(R.drawable.ic_save); setColorFilter(tv.data, PorterDuff.Mode.SRC_IN) }
+                findViewById<ImageButton>(R.id.sendButton).apply { setImageResource(R.drawable.ic_check); setColorFilter(tv.data, PorterDuff.Mode.SRC_IN) }
                 findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE
                 findViewById<TextView>(R.id.replyText).text = "正在编辑消息"
                 input.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, 0)
@@ -484,7 +494,11 @@ class ChatActivity : AppCompatActivity() {
     private fun showEditHistoryDialog(historyJson: String?) {
         try {
             val arr = JSONArray(historyJson ?: "[]")
-            val items = Array(arr.length()) { i -> arr.getString(i) }
+            val items = Array(arr.length()) { i -> 
+                val obj = arr.getJSONObject(i)
+                val timeStr = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(obj.optLong("date", 0L) * 1000))
+                "$timeStr\n${obj.optString("text", "")}"
+            }
             MaterialAlertDialogBuilder(this).setTitle("编辑历史").setItems(items, null).setPositiveButton("关闭", null).show()
         } catch (e: Exception) { Toast.makeText(this, "解析历史失败", Toast.LENGTH_SHORT).show() }
     }
