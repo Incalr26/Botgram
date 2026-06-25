@@ -91,10 +91,7 @@ class ChatActivity : AppCompatActivity() {
             setSupportActionBar(toolbar)
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
-
-            toolbar.setOnClickListener {
-                startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) })
-            }
+            toolbar.setOnClickListener { startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) }) }
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
@@ -153,7 +150,7 @@ class ChatActivity : AppCompatActivity() {
             sendButton.setOnClickListener {
                 val text = messageInput.text.toString().trim()
                 if (editingMessageId != null) editSelfMessage(text, editingMessageId!!)
-                else { if (pendingUploads.isNotEmpty()) uploadMediaAndSend(text) else if (text.isNotEmpty()) sendTextMessage(text, replyToMessageId) }
+                else { if (pendingUploads.isNotEmpty()) uploadMediaAndSend(text) else if (text.isNotEmpty()) sendTextMessage(text, replyToMessageId, null) }
                 replyToMessageId = null; editingMessageId = null
                 sendButton.setImageResource(R.drawable.ic_send)
                 replyBanner.visibility = View.GONE
@@ -214,7 +211,6 @@ class ChatActivity : AppCompatActivity() {
         if (pendingUploads.isEmpty()) { previewContainer.visibility = View.GONE; return }
         previewContainer.visibility = View.VISIBLE; previewList.removeAllViews()
         val density = resources.displayMetrics.density; val tv = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tv, true)
-        
         for ((index, item) in pendingUploads.withIndex()) {
             val frame = FrameLayout(this).apply { layoutParams = LinearLayout.LayoutParams((64 * density).toInt(), (64 * density).toInt()).apply { marginEnd = (8 * density).toInt() } }
             val card = MaterialCardView(this).apply { layoutParams = FrameLayout.LayoutParams((56 * density).toInt(), (56 * density).toInt()).apply { gravity = Gravity.BOTTOM or Gravity.START }; radius = 8 * density; setCardBackgroundColor(Color.parseColor("#E0E0E0")); cardElevation = 0f }
@@ -230,12 +226,13 @@ class ChatActivity : AppCompatActivity() {
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
         val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
         
-        // 使用你原本喜欢的定制无发灰矢量图标
+        // 使用新绘制的不发灰 Material 图标，并新增内联键盘
         val items = listOf(
             Triple("发送图片", R.drawable.ic_photo, 1),
             Triple("发送视频", R.drawable.ic_video, 2),
             Triple("发送音频", R.drawable.ic_audio, 4),
-            Triple("发送文件", R.drawable.ic_file, 3)
+            Triple("发送文件", R.drawable.ic_file, 3),
+            Triple("发送内联键盘", R.drawable.ic_keyboard, 5)
         )
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
 
@@ -243,11 +240,27 @@ class ChatActivity : AppCompatActivity() {
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
             itemView.findViewById<ImageView>(R.id.menu_icon).apply { layoutParams = LinearLayout.LayoutParams((24 * resources.displayMetrics.density).toInt(), (24 * resources.displayMetrics.density).toInt()); setImageResource(iconRes); setColorFilter(tvColor.data) }
             itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(tvText.data) }
-            itemView.setOnClickListener { popupWindow.dismiss(); when (action) { 1 -> pickImagesLauncher.launch("image/*"); 2 -> pickVideosLauncher.launch("video/*"); 3 -> pickFilesLauncher.launch("*/*"); 4 -> pickAudioLauncher.launch("audio/*") } }
+            itemView.setOnClickListener { popupWindow.dismiss(); when (action) { 1 -> pickImagesLauncher.launch("image/*"); 2 -> pickVideosLauncher.launch("video/*"); 3 -> pickFilesLauncher.launch("*/*"); 4 -> pickAudioLauncher.launch("audio/*"); 5 -> showInlineKeyboardDialog() } }
             container.addView(itemView)
         }
         container.measure(0, 0); val loc = IntArray(2); anchor.getLocationOnScreen(loc)
         popupWindow.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, loc[0], loc[1] - container.measuredHeight - (16 * resources.displayMetrics.density).toInt())
+    }
+
+    private fun showInlineKeyboardDialog() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 24) }
+        val msgInput = EditText(this).apply { hint = "要发送的消息文字..." }
+        val btnText = EditText(this).apply { hint = "按钮显示的文字" }
+        val btnUrl = EditText(this).apply { hint = "按钮跳转的 URL (可选)" }
+        layout.addView(msgInput); layout.addView(btnText); layout.addView(btnUrl)
+        
+        MaterialAlertDialogBuilder(this).setTitle("发送内联键盘").setView(layout).setPositiveButton("发送") { _, _ ->
+            val txt = msgInput.text.toString(); val bt = btnText.text.toString(); val bu = btnUrl.text.toString()
+            if (txt.isNotEmpty() && bt.isNotEmpty()) {
+                val keyboard = JSONObject().apply { put("inline_keyboard", JSONArray().apply { put(JSONArray().apply { put(JSONObject().apply { put("text", bt); put("url", bu.takeIf { it.isNotEmpty() } ?: "https://t.me") }) }) }) }
+                sendTextMessage(txt, null, keyboard.toString())
+            }
+        }.setNegativeButton("取消", null).show()
     }
 
     private fun uploadMediaAndSend(caption: String) {
@@ -257,7 +270,6 @@ class ChatActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
             val uploadClient = ApiClient.getClient().newBuilder().connectTimeout(60, TimeUnit.SECONDS).writeTimeout(12, TimeUnit.HOURS).readTimeout(12, TimeUnit.HOURS).build()
-
             if (uploadsSnapshot.size == 1) {
                 val item = uploadsSnapshot.first(); val type = item.second; val file = FileHelper.uriToTempFile(this@ChatActivity, item.first) ?: return@launch
                 val mimeType = contentResolver.getType(item.first) ?: "application/octet-stream"
@@ -274,16 +286,11 @@ class ChatActivity : AppCompatActivity() {
                 uploadsSnapshot.forEachIndexed { index, pair ->
                     val type = if (pair.second == "audio" || pair.second == "document") "document" else pair.second
                     val file = FileHelper.uriToTempFile(this@ChatActivity, pair.first)
-                    if (file != null) {
-                        tempFiles.add(file); val mediaObj = JSONObject().apply { put("type", type); put("media", "attach://file$index"); if (index == 0 && caption.isNotEmpty()) put("caption", caption) }
-                        mediaArray.put(mediaObj); val mimeType = contentResolver.getType(pair.first) ?: "application/octet-stream"; builder.addFormDataPart("file$index", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull()))
-                    }
+                    if (file != null) { tempFiles.add(file); val mediaObj = JSONObject().apply { put("type", type); put("media", "attach://file$index"); if (index == 0 && caption.isNotEmpty()) put("caption", caption) }; mediaArray.put(mediaObj); val mimeType = contentResolver.getType(pair.first) ?: "application/octet-stream"; builder.addFormDataPart("file$index", file.name, file.asRequestBody(mimeType.toMediaTypeOrNull())) }
                 }
                 builder.addFormDataPart("media", mediaArray.toString()); val req = Request.Builder().url("https://api.telegram.org/bot$token/sendMediaGroup").post(builder.build()).build()
                 val res = uploadClient.newCall(req).execute(); tempFiles.forEach { it.delete() }
-                if (res.isSuccessful) {
-                    val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } }
-                }
+                if (res.isSuccessful) { val msg = JSONObject(res.body?.string() ?: ""); if (msg.getBoolean("ok")) { val resultArray = msg.optJSONArray("result"); if (resultArray != null) { for (i in 0 until resultArray.length()) insertAndRefresh(resultArray.getJSONObject(i), caption) } } }
             }
         }
     }
@@ -293,10 +300,7 @@ class ChatActivity : AppCompatActivity() {
         messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000); loadMessagesInternal()
     }
 
-    private fun setReplyBanner(message: MessageEntity) {
-        findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"; findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE
-    }
-
+    private fun setReplyBanner(message: MessageEntity) { findViewById<TextView>(R.id.replyText).text = "回复 ${message.senderName ?: "未知"}: ${message.text?.take(50) ?: ""}"; findViewById<LinearLayout>(R.id.replyBanner).visibility = View.VISIBLE }
     private fun getStatusBarHeight(): Int { val res = resources.getIdentifier("status_bar_height", "dimen", "android"); return if (res > 0) resources.getDimensionPixelSize(res) else 0 }
 
     private suspend fun loadTitleAndType() {
@@ -311,24 +315,10 @@ class ChatActivity : AppCompatActivity() {
 
         withContext(Dispatchers.Main) {
             if (chat != null) {
-                chatType = chat.type
-                val username = chat.username
+                chatType = chat.type; val username = chat.username
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
-                
-                // 完美还原逻辑：判定有无 username 精确断定公开与私密
-                val typeStr = when (chat.type) { 
-                    "private" -> "私聊"
-                    "group" -> "私密群组"
-                    "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"
-                    "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"
-                    else -> chat.type 
-                }
-                
-                if (chat.type == "private") {
-                    supportActionBar?.subtitle = "私聊"
-                } else {
-                    supportActionBar?.subtitle = typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
-                }
+                val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"; "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"; else -> chat.type }
+                supportActionBar?.subtitle = if (chat.type == "private") "私聊" else typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
             }
         }
     }
@@ -341,15 +331,16 @@ class ChatActivity : AppCompatActivity() {
     private fun showMessageMenu(message: MessageEntity, anchor: View) {
         val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = ContextCompat.getDrawable(this@ChatActivity, R.drawable.popup_menu_background); elevation = 12f * resources.displayMetrics.density; clipToOutline = true }
         val tvText = TypedValue(); theme.resolveAttribute(com.google.android.material.R.attr.colorOnSurface, tvText, true)
+        val tvColor = TypedValue(); theme.resolveAttribute(android.R.attr.colorPrimary, tvColor, true)
 
-        // 彻底回退至你最初优美的原版图标
+        // 全部彻底调用你原本喜欢的矢量文件
         val items = mutableListOf(
             Triple("复制", R.drawable.ic_copy, 1),
-            Triple("复读", R.drawable.ic_plus_one_outline, 2),
+            Triple("复读", R.drawable.ic_repeat, 2),
             Triple("转发式复读", R.drawable.ic_repeat, 6),
             Triple("转发给...", R.drawable.ic_send, 7),
             Triple("回复", R.drawable.ic_reply, 4),
-            Triple("添加表情回应", R.drawable.ic_smile, 11) // 使用新绘制的笑脸
+            Triple("添加表情回应", R.drawable.ic_smile, 11)
         )
         if (chatType != "private") items.add(2, Triple("复制链接", R.drawable.ic_link, 5))
         if (message.isOutgoing) { items.add(Triple("编辑", R.drawable.ic_edit, 9)); items.add(Triple("撤回", R.drawable.ic_revoke, 3)) }
@@ -362,13 +353,11 @@ class ChatActivity : AppCompatActivity() {
 
         items.forEach { (title, iconRes, action) ->
             val itemView = layoutInflater.inflate(R.layout.item_popup_menu, container, false)
-            // 不再使用 setColorFilter 让图标发灰，保留图标绝对原生质感！
-            itemView.findViewById<ImageView>(R.id.menu_icon).apply { setImageResource(iconRes) }
+            itemView.findViewById<ImageView>(R.id.menu_icon).apply { setImageResource(iconRes); setColorFilter(tvColor.data) }
             itemView.findViewById<TextView>(R.id.menu_text).apply { text = title; setTextColor(tvText.data) }
             itemView.setOnClickListener { handleMenuAction(action, message); popupWindow.dismiss() }
             container.addView(itemView)
         }
-
         container.measure(0, 0); val loc = IntArray(2); anchor.getLocationOnScreen(loc)
         var yPos = loc[1] + anchor.height; if (yPos + container.measuredHeight > resources.displayMetrics.heightPixels) yPos = loc[1] - container.measuredHeight
         popupWindow.showAtLocation(anchor.rootView, Gravity.NO_GRAVITY, loc[0], if (yPos < 0) 50 else yPos)
@@ -393,13 +382,12 @@ class ChatActivity : AppCompatActivity() {
                 input.requestFocus(); (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(input, 0)
             }
             10 -> showEditHistoryDialog(message.editHistory)
-            11 -> showReactionGridDialog(message.messageId)
+            11 -> showReactionGridDialog(message)
         }
     }
 
-    // Material You 网格化表情回应，无边框
-    private fun showReactionGridDialog(msgId: Long) {
-        val emojis = arrayOf("🤔", "🤯", "😱", "😭", "😂", "🤣", "👍", "👎", "❤️", "🔥", "👏", "🎉", "💩", "😢", "😍", "😡", "🤮", "🙏", "👌", "👀", "💯", "🥱", "🤡", "鸽")
+    private fun showReactionGridDialog(message: MessageEntity) {
+        val emojis = arrayOf("👍", "👎", "❤️", "🔥", "🥰", "👏", "😁", "🤔", "🤯", "😱", "🤬", "😢", "🎉", "🤩", "🤮", "💩", "🙏", "👌", "🕊", "🤡", "🥱", "🥴", "😍", "🐳", "❤️‍🔥", "🌚", "🌭", "💯", "🤣", "⚡", "🍌", "🏆", "💔", "🤨", "😐", "🍓", "🍾", "吻", "🖕", "😈", "睡", "哭", "🤓", "幽灵", "👨‍💻", "👀", "🎃", "见", "没见", "瞎")
         val grid = GridLayout(this).apply { columnCount = 6; layoutParams = ViewGroup.LayoutParams(-1, -2); setPadding(32, 48, 32, 48) }
         val tvText = TypedValue(); theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, tvText, true)
         
@@ -412,19 +400,32 @@ class ChatActivity : AppCompatActivity() {
                 setOnClickListener {
                     lifecycleScope.launch(Dispatchers.IO) {
                         val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-                        val reactionJson = JSONObject().apply { put("chat_id", chatId); put("message_id", msgId); put("reaction", JSONArray().apply { put(JSONObject().apply { put("type", "emoji"); put("emoji", emoji) }) }) }
-                        ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/setMessageReaction").post(reactionJson.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute()
-                        withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "表情已发送", Toast.LENGTH_SHORT).show() }
+                        val reactionJson = JSONObject().apply { put("chat_id", chatId); put("message_id", message.messageId); put("reaction", JSONArray().apply { put(JSONObject().apply { put("type", "emoji"); put("emoji", emoji) }) }) }
+                        val req = Request.Builder().url("https://api.telegram.org/bot$token/setMessageReaction").post(reactionJson.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
+                        val res = ApiClient.getClient().newCall(req).execute()
+                        if (res.isSuccessful) {
+                            // 立即写入本地数据库实现秒显
+                            val oldArr = try { JSONArray(message.reactions ?: "[]") } catch(e:Exception){ JSONArray() }
+                            var found = false
+                            for (i in 0 until oldArr.length()) {
+                                val o = oldArr.getJSONObject(i)
+                                if (o.optString("emoji") == emoji) { o.put("count", o.optInt("count", 1) + 1); found = true; break }
+                            }
+                            if (!found) oldArr.put(JSONObject().apply { put("emoji", emoji); put("count", 1) })
+                            val updatedMsg = message.copy(reactions = oldArr.toString())
+                            messageRepository.insertMessage(updatedMsg)
+                            withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "表情已发送", Toast.LENGTH_SHORT).show(); loadMessagesInternal() }
+                        }
                     }
                     dialog?.dismiss()
                 }
             }
             grid.addView(tv)
         }
-        dialog = MaterialAlertDialogBuilder(this).setTitle("添加表情回应").setView(grid).show()
+        val scroll = ScrollView(this).apply { addView(grid) }
+        dialog = MaterialAlertDialogBuilder(this).setTitle("添加表情回应").setView(scroll).show()
     }
 
-    // 可长按选择复制的编辑历史面板
     private fun showEditHistoryDialog(historyJson: String?) {
         try {
             val arr = JSONArray(historyJson ?: "[]")
@@ -433,16 +434,15 @@ class ChatActivity : AppCompatActivity() {
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 val timeStr = SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()).format(Date(obj.optLong("date", 0L) * 1000))
-                val text = obj.optString("text", "")
                 val tv = TextView(this).apply {
-                    this.text = Html.fromHtml("<small><font color='#888888'>$timeStr</font></small><br/>$text", Html.FROM_HTML_MODE_COMPACT)
+                    this.text = Html.fromHtml("<small><font color='#888888'>$timeStr</font></small><br/>${obj.optString("text", "")}", Html.FROM_HTML_MODE_COMPACT)
                     setTextColor(tvText.data); textSize = 15f; setTextIsSelectable(true)
                     layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 48 }
                 }
                 container.addView(tv)
             }
             val scroll = ScrollView(this).apply { addView(container) }
-            MaterialAlertDialogBuilder(this).setTitle("编辑历史").setView(scroll).setPositiveButton("关闭", null).show()
+            MaterialAlertDialogBuilder(this).setTitle("编辑历史 (可长按复制)").setView(scroll).setPositiveButton("关闭", null).show()
         } catch (e: Exception) { Toast.makeText(this, "解析历史失败", Toast.LENGTH_SHORT).show() }
     }
 
@@ -457,10 +457,21 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveMedia(message: MessageEntity) {
+        Toast.makeText(this, "正在尝试保存...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val fileCachePrefs = getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
+            val savedPath = fileCachePrefs.getString(message.messageId.toString(), null)
+            if (savedPath != null && File(savedPath).exists()) {
+                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "文件已在本地: $savedPath", Toast.LENGTH_LONG).show() }
+            } else handleFileClick(message)
+        }
+    }
+
     private fun handleRepeatAction(message: MessageEntity, isForward: Boolean) {
         val prefs = getSharedPreferences("botgram_prefs", MODE_PRIVATE)
-        if (prefs.getBoolean("repeat_confirm", true)) { MaterialAlertDialogBuilder(this).setTitle(if (isForward) "转发式复读确认" else "复读确认").setMessage(if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？").setPositiveButton("确定") { _, _ -> if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null) }.setNegativeButton("取消", null).show()
-        } else { if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null) }
+        if (prefs.getBoolean("repeat_confirm", true)) { MaterialAlertDialogBuilder(this).setTitle(if (isForward) "转发式复读确认" else "复读确认").setMessage(if (isForward) "确定要将这条消息以转发形式重新发送到当前会话吗？" else "确定要将这条消息重新发送吗？").setPositiveButton("确定") { _, _ -> if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null, null) }.setNegativeButton("取消", null).show()
+        } else { if (isForward) forwardMessage(message, chatId) else sendTextMessage(message.text ?: "", null, null) }
     }
 
     private fun showForwardDialog(message: MessageEntity) {
@@ -493,10 +504,10 @@ class ChatActivity : AppCompatActivity() {
         } catch (e: Exception) {}
     }
 
-    private fun sendTextMessage(text: String, replyTo: Long?) {
+    private fun sendTextMessage(text: String, replyTo: Long?, replyMarkupStr: String?) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
             val token = getSharedPreferences("botgram_prefs", MODE_PRIVATE).getString("bot_token", "") ?: return@launch
-            val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); put("parse_mode", "Markdown"); replyTo?.let { put("reply_to_message_id", it) } }
+            val jsonBody = JSONObject().apply { put("chat_id", chatId); put("text", text); put("parse_mode", "Markdown"); replyTo?.let { put("reply_to_message_id", it) }; replyMarkupStr?.let { put("reply_markup", JSONObject(it)) } }
             var res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute()
             if (!res.isSuccessful) { jsonBody.remove("parse_mode"); res = ApiClient.getClient().newCall(Request.Builder().url("https://api.telegram.org/bot$token/sendMessage").post(jsonBody.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()).execute() }
             if (res.isSuccessful) {
@@ -511,18 +522,4 @@ class ChatActivity : AppCompatActivity() {
 
     private fun gotoCrash(throwable: Throwable) { startActivity(Intent(this, CrashActivity::class.java).apply { putExtra("stack_trace", android.util.Log.getStackTraceString(throwable)); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }); finish() }
     override fun onOptionsItemSelected(item: MenuItem): Boolean { if (item.itemId == android.R.id.home) { finish(); return true }; return super.onOptionsItemSelected(item) }
-    //修复编译问题↓
-        private fun saveMedia(message: MessageEntity) {
-        Toast.makeText(this, "正在尝试保存...", Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch(Dispatchers.IO) {
-            val fileCachePrefs = getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
-            val savedPath = fileCachePrefs.getString(message.messageId.toString(), null)
-            if (savedPath != null && File(savedPath).exists()) {
-                withContext(Dispatchers.Main) { Toast.makeText(this@ChatActivity, "文件已在本地: $savedPath", Toast.LENGTH_LONG).show() }
-            } else {
-                handleFileClick(message) // 调用现有的下载逻辑
-            }
-        }
-    }
-
 }

@@ -72,9 +72,9 @@ class MessageAdapter(
         val replyName: TextView = view.findViewById(R.id.replyName)
         val replyMeta: TextView = view.findViewById(R.id.replyMeta)
         val replyPreview: TextView = view.findViewById(R.id.replyPreview)
-        val mediaContainer: MaterialCardView = view.findViewById(R.id.mediaContainer)
+        val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
-        val mediaOverlay: View = view.findViewById(R.id.mediaOverlay)
+        val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
         val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
         val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
@@ -103,16 +103,13 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
-        // --- 系统消息拦截与渲染 ---
         if (rawObj.has("new_chat_members") || rawObj.has("left_chat_member") || rawObj.has("pinned_message") || rawObj.has("new_chat_title")) {
             holder.mainMessageContainer.visibility = View.GONE
             holder.systemMessageText.visibility = View.VISIBLE
-            
             val tv = TypedValue(); ctx.theme.resolveAttribute(com.google.android.material.R.attr.colorSurfaceVariant, tv, true)
             holder.systemMessageText.background = GradientDrawable().apply { setColor(tv.data); cornerRadius = 32f * ctx.resources.displayMetrics.density }
-            
             var sysTxt = "系统消息"
-            val doer = rawObj.optJSONObject("from")?.optString("first_name", "未知用户") ?: "未知"
+            val doer = rawObj.optJSONObject("from")?.optString("first_name", "未知") ?: "未知"
             if (rawObj.has("new_chat_members")) {
                 val arr = rawObj.getJSONArray("new_chat_members"); val names = mutableListOf<String>()
                 for(i in 0 until arr.length()) names.add(arr.getJSONObject(i).optString("first_name", ""))
@@ -122,7 +119,6 @@ class MessageAdapter(
                 sysTxt = if (doer == left) "$doer 离开了群组" else "$doer 移除了 $left"
             } else if (rawObj.has("pinned_message")) { sysTxt = "$doer 置顶了一条消息"
             } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了群组名为 ${rawObj.getString("new_chat_title")}" }
-            
             holder.systemMessageText.text = sysTxt
             return
         }
@@ -163,10 +159,7 @@ class MessageAdapter(
 
         if (rawObj.has("forward_origin") || rawObj.has("forward_from") || rawObj.has("forward_from_chat")) {
             val origin = rawObj.optJSONObject("forward_origin")
-            val fName = origin?.optJSONObject("sender_user")?.optString("first_name") 
-                        ?: origin?.optJSONObject("chat")?.optString("title") 
-                        ?: rawObj.optJSONObject("forward_from")?.optString("first_name") 
-                        ?: rawObj.optJSONObject("forward_from_chat")?.optString("title") ?: "未知"
+            val fName = origin?.optJSONObject("sender_user")?.optString("first_name") ?: origin?.optJSONObject("chat")?.optString("title") ?: rawObj.optJSONObject("forward_from")?.optString("first_name") ?: rawObj.optJSONObject("forward_from_chat")?.optString("title") ?: "未知"
             val fDate = origin?.optLong("date", 0L) ?: rawObj.optLong("forward_date", 0L)
             holder.forwardInfo.text = "转发自 $fName " + (if (fDate > 0) shortDateFormat.format(Date(fDate * 1000)) else "")
             holder.forwardInfo.visibility = View.VISIBLE
@@ -267,7 +260,7 @@ class MessageAdapter(
             holder.messageText.text = builder; holder.messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
         }
 
-        // --- 修复并发表情重叠：彻底兼容 Telegram 原生 Reaction 嵌套结构 ---
+        // 完美解析和展示多个表情响应
         if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
             try {
                 val arr = JSONArray(message.reactions)
@@ -276,12 +269,8 @@ class MessageAdapter(
                     holder.reactionsContainer.removeAllViews()
                     for (i in 0 until arr.length()) {
                         val r = arr.getJSONObject(i)
-                        // 兼容 Telegram 原生结构：type -> {type: emoji, emoji: '👍'}
-                        val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") {
-                            r.getJSONObject("type").optString("emoji", "❓")
-                        } else r.optString("emoji", "❓")
+                        val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") r.getJSONObject("type").optString("emoji", "❓") else r.optString("emoji", "❓")
                         val count = if (r.has("total_count")) r.getInt("total_count") else r.optInt("count", 1)
-                        
                         val tv = TextView(ctx).apply {
                             text = "$emojiStr $count"
                             textSize = 12f; setTextColor(ctx.getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant))
@@ -311,7 +300,9 @@ class MessageAdapter(
                 }
             }
         }
-        holder.mainMessageContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
+        
+        // 双重保险：气泡容器支持长按触发菜单，使得文本长按可以选择文字
+        holder.bubbleContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
     }
     
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }

@@ -9,7 +9,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
 import coil.load
 import coil.transform.CircleCropTransformation
 import com.google.android.material.appbar.AppBarLayout
@@ -21,8 +23,6 @@ import com.incalr26.botgram.util.AvatarHelper
 import kotlinx.coroutines.*
 import okhttp3.Request
 import org.json.JSONObject
-import androidx.lifecycle.lifecycleScope // 以前有编译错误
-import kotlinx.coroutines.*
 
 class ChatInfoActivity : AppCompatActivity() {
 
@@ -51,8 +51,6 @@ class ChatInfoActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.Main) {
             val token = getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE).getString("bot_token", "") ?: ""
-            
-            // 将网络请求移入 IO 线程
             val resultJson = withContext(Dispatchers.IO) {
                 val req = Request.Builder().url("https://api.telegram.org/bot$token/getChat?chat_id=$chatId").build()
                 try {
@@ -67,18 +65,13 @@ class ChatInfoActivity : AppCompatActivity() {
             if (resultJson != null && resultJson.getBoolean("ok")) {
                 renderUI(resultJson.getJSONObject("result"))
             }
-
-            // 获取头像
+            
             val avatarUrl = withContext(Dispatchers.IO) { AvatarHelper.getUserAvatar(chatId) }
             if (!avatarUrl.isNullOrEmpty()) {
                 findViewById<ImageView>(R.id.chatInfoAvatar).load(avatarUrl) { crossfade(true) }
-                findViewById<ImageView>(R.id.miniToolbarAvatar).load(avatarUrl) { 
-                    crossfade(true)
-                    transformations(CircleCropTransformation()) 
-                }
+                miniAvatar.load(avatarUrl) { crossfade(true); transformations(CircleCropTransformation()) }
             }
         }
-        //修复编译报错问题↑
     }
 
     private fun renderUI(chat: JSONObject) {
@@ -87,20 +80,57 @@ class ChatInfoActivity : AppCompatActivity() {
 
         val container = findViewById<LinearLayout>(R.id.infoContentContainer)
         
-        fun addCard(title: String, contentBlocks: List<Pair<String, String>>) {
+        fun addCard(titleStr: String, contentBlocks: List<Pair<String, String>>) {
             if (contentBlocks.isEmpty()) return
             val card = MaterialCardView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }
                 radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant))
             }
             val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
-            val sectionTitle = TextView(this).apply { text = title; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) }
+            val sectionTitle = TextView(this).apply { text = titleStr; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) }
             layout.addView(sectionTitle)
             
             contentBlocks.forEach { (label, value) ->
                 val tvLabel = TextView(this).apply { text = label; textSize = 12f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)) }
                 val tvValue = TextView(this).apply { text = value; textSize = 16f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)); setPadding(0, 4, 0, 24); setTextIsSelectable(true) }
                 layout.addView(tvLabel); layout.addView(tvValue)
+            }
+            card.addView(layout); container.addView(card)
+        }
+
+        // 新增权限开关卡片
+        fun addPermissionCard(permObj: JSONObject) {
+            val card = MaterialCardView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }
+                radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant))
+            }
+            val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+            val sectionTitle = TextView(this).apply { text = "管理成员权限"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) }
+            layout.addView(sectionTitle)
+
+            val pMap = mapOf(
+                "can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件",
+                "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_polls" to "发送投票",
+                "can_add_web_page_previews" to "添加网页预览", "can_change_info" to "修改群信息", "can_invite_users" to "邀请用户",
+                "can_pin_messages" to "置顶消息"
+            )
+            
+            pMap.forEach { (key, cnName) ->
+                if (permObj.has(key)) {
+                    val row = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(0, 8, 0, 8) }
+                    val txtLayout = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+                    val tvCn = TextView(this@ChatInfoActivity).apply { text = cnName; textSize = 16f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)) }
+                    val tvEn = TextView(this@ChatInfoActivity).apply { text = key; textSize = 11f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)) }
+                    txtLayout.addView(tvCn); txtLayout.addView(tvEn)
+                    
+                    val sw = SwitchCompat(this@ChatInfoActivity).apply {
+                        isChecked = permObj.getBoolean(key)
+                        // TODO: 绑定变更 API 调用，留给下一个版本
+                        isEnabled = false 
+                    }
+                    row.addView(txtLayout); row.addView(sw)
+                    layout.addView(row)
+                }
             }
             card.addView(layout); container.addView(card)
         }
@@ -124,18 +154,7 @@ class ChatInfoActivity : AppCompatActivity() {
         addCard("详细资料", descInfo)
 
         val permObj = chat.optJSONObject("permissions")
-        if (permObj != null) {
-            val permList = mutableListOf<Pair<String, String>>()
-            val pMap = mapOf(
-                "can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件",
-                "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_video_notes" to "发送视频留言",
-                "can_send_voice_notes" to "发送语音", "can_send_polls" to "发送投票", "can_send_other_messages" to "发送其他消息",
-                "can_add_web_page_previews" to "添加网页预览", "can_change_info" to "修改群信息", "can_invite_users" to "邀请用户",
-                "can_pin_messages" to "置顶消息", "can_manage_topics" to "管理话题"
-            )
-            pMap.forEach { (key, cnName) -> if (permObj.has(key)) permList.add("$cnName\n($key)" to if (permObj.getBoolean(key)) "允许" else "禁止") }
-            addCard("成员权限设置", permList)
-        }
+        if (permObj != null) addPermissionCard(permObj)
 
         val extraInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("pinned_message")) extraInfo.add("当前置顶消息" to chat.getJSONObject("pinned_message").optString("text", "[媒体/复杂消息]"))
