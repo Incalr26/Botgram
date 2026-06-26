@@ -9,7 +9,7 @@
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="320dp"
+        android:layout_height="280dp"
         android:fitsSystemWindows="true"
         android:background="?attr/colorSurface">
 
@@ -22,7 +22,7 @@
             app:statusBarScrim="?attr/colorSurface"
             app:titleCollapseMode="scale"
             app:expandedTitleMarginStart="24dp"
-            app:expandedTitleMarginBottom="24dp"
+            app:expandedTitleMarginBottom="28dp"
             app:collapsedTitleTextColor="?attr/colorOnSurface"
             app:expandedTitleTextColor="@android:color/white"
             app:layout_scrollFlags="scroll|exitUntilCollapsed">
@@ -45,6 +45,7 @@
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
+                app:navigationIconTint="?attr/colorOnSurface"
                 app:layout_collapseMode="pin">
                 
                 <ImageView
@@ -53,8 +54,7 @@
                     android:layout_height="36dp"
                     android:layout_gravity="end"
                     android:layout_marginEnd="16dp"
-                    android:visibility="gone"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
+                    android:visibility="gone" />
             </androidx.appcompat.widget.Toolbar>
         </com.google.android.material.appbar.CollapsingToolbarLayout>
     </com.google.android.material.appbar.AppBarLayout>
@@ -63,6 +63,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
+        android:paddingTop="8dp"
         android:paddingBottom="32dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 

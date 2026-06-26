@@ -7,11 +7,8 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.TextPaint
-import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
-import android.text.style.URLSpan
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -27,7 +24,6 @@ import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.util.AvatarHelper
@@ -43,10 +39,11 @@ class MessageAdapter(
     private val onClick: ((MessageEntity, View) -> Unit)? = null,
     private val onLongClick: ((MessageEntity, View) -> Boolean)? = null,
     private val onAvatarClick: ((MessageEntity) -> Unit)? = null,
-    private val onFileClick: ((MessageEntity) -> Unit)? = null
+    private val onAvatarLongClick: ((MessageEntity) -> Unit)? = null,
+    private val onFileClick: ((MessageEntity) -> Unit)? = null,
+    private val onReactionToggle: ((MessageEntity, String) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
-    private val shortDateFormat = SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault())
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val minFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -55,8 +52,7 @@ class MessageAdapter(
         if (size <= 0) return "未知"
         if (size < 1024) return "${size} B"
         if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024f)
-        if (size < 1024 * 1024 * 1024) return String.format("%.2f MB", size / (1024f * 1024f))
-        return String.format("%.2f GB", size / (1024f * 1024f * 1024f))
+        return String.format("%.2f MB", size / (1024f * 1024f))
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -76,15 +72,12 @@ class MessageAdapter(
         val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
         val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
-        val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
         val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
-        val fileIcon: ImageView = view.findViewById(R.id.fileIcon)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
         val reactionsContainer: LinearLayout = view.findViewById(R.id.reactionsContainer)
         
-        val container: LinearLayout = view as LinearLayout
         var boundMessageId: Long = 0L
         var loadJob: Job? = null
         var mediaJob: Job? = null
@@ -104,23 +97,28 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
+        // 解析进群或移除等系统事件提示
         if (rawObj.has("new_chat_members") || rawObj.has("left_chat_member") || rawObj.has("pinned_message") || rawObj.has("new_chat_title")) {
             holder.mainMessageContainer.visibility = View.GONE
             holder.systemMessageText.visibility = View.VISIBLE
             val tv = TypedValue(); ctx.theme.resolveAttribute(com.google.android.material.R.attr.colorSurfaceVariant, tv, true)
-            holder.systemMessageText.background = GradientDrawable().apply { setColor(tv.data); cornerRadius = 32f * ctx.resources.displayMetrics.density }
+            holder.systemMessageText.background = GradientDrawable().apply { setColor(tv.data); cornerRadius = 32f }
             var sysTxt = "系统消息"
             val doer = rawObj.optJSONObject("from")?.optString("first_name", "未知") ?: "未知"
             if (rawObj.has("new_chat_members")) {
                 val arr = rawObj.getJSONArray("new_chat_members"); val names = mutableListOf<String>()
                 for(i in 0 until arr.length()) names.add(arr.getJSONObject(i).optString("first_name", ""))
-                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入"
+                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入群组"
             } else if (rawObj.has("left_chat_member")) {
                 val left = rawObj.getJSONObject("left_chat_member").optString("first_name", "")
                 sysTxt = if (doer == left) "$doer 离开了聊天" else "$doer 移除了 $left"
             } else if (rawObj.has("pinned_message")) { sysTxt = "$doer 置顶了消息"
-            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称为 ${rawObj.getString("new_chat_title")}" }
+            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改群名称为 ${rawObj.getString("new_chat_title")}" }
             holder.systemMessageText.text = sysTxt
+            
+            // 系统提示绑定长按菜单与发起人详情页跳转
+            holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
+            holder.systemMessageText.setOnClickListener { onAvatarClick?.invoke(message) }
             return
         }
 
@@ -139,8 +137,13 @@ class MessageAdapter(
             holder.avatarFallback.text = message.senderName?.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
             holder.avatarFallback.visibility = View.VISIBLE
             holder.avatar.visibility = View.GONE
-            holder.avatar.setOnClickListener { onAvatarClick?.invoke(message) }
-            holder.avatarFallback.setOnClickListener { onAvatarClick?.invoke(message) }
+            
+            val clickAvatar = View.OnClickListener { onAvatarClick?.invoke(message) }
+            val longClickAvatar = View.OnLongClickListener { onAvatarLongClick?.invoke(message); true }
+            holder.avatar.setOnClickListener(clickAvatar)
+            holder.avatar.setOnLongClickListener(longClickAvatar)
+            holder.avatarFallback.setOnClickListener(clickAvatar)
+            holder.avatarFallback.setOnLongClickListener(longClickAvatar)
         }
 
         val nameBuilder = StringBuilder(message.senderName ?: "未知")
@@ -175,7 +178,7 @@ class MessageAdapter(
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
-            var fileId = ""; var fileSize = 0L; var isVideo = false; var autoCache = false
+            var fileId = ""; var fileSize = 0L; var autoCache = false
             if (rawObj.has("photo")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[图片] "
                 val arr = rawObj.getJSONArray("photo"); val photoObj = arr.getJSONObject(arr.length() - 1)
@@ -186,10 +189,9 @@ class MessageAdapter(
             } else if (rawObj.has("video")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "; val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
-                fileSize = vid.optLong("file_size", 0L); isVideo = true; autoCache = false 
+                fileSize = vid.optLong("file_size", 0L); autoCache = false 
             }
             holder.mediaOverlaySize.text = formatSize(fileSize)
-            holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else R.drawable.ic_download_media)
             val isUnlocked = isOutgoing || unlockedSet.contains(currentMsgId.toString())
             holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
@@ -199,9 +201,7 @@ class MessageAdapter(
                 holder.mediaJob = scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
                     if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
-                        if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
-                            try { ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse(url), "video/*") }) } catch (_: Exception) { }
-                        } else Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
+                        Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
                     }
                 }
             }
@@ -229,21 +229,33 @@ class MessageAdapter(
             holder.messageText.text = builder
         }
 
+        // 解析多项表情回应并判断自身是否已激活高亮
+        holder.reactionsContainer.removeAllViews()
         if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
             try {
                 val arr = JSONArray(message.reactions)
                 if (arr.length() > 0) {
                     holder.reactionsContainer.visibility = View.VISIBLE
-                    holder.reactionsContainer.removeAllViews()
                     for (i in 0 until arr.length()) {
                         val r = arr.getJSONObject(i)
                         val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") r.getJSONObject("type").optString("emoji", "❓") else r.optString("emoji", "❓")
                         val count = if (r.has("total_count")) r.getInt("total_count") else r.optInt("count", 1)
+                        val isChosen = r.optBoolean("chosen", false) // 判断自身是否已回应
+                        
                         val tv = TextView(ctx).apply {
                             text = "$emojiStr $count"
-                            textSize = 12f; setTextColor(ctx.getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant))
-                            background = GradientDrawable().apply { setColor(ctx.getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant)); cornerRadius = 24f; setStroke(1, Color.LTGRAY) }
-                            setPadding(16, 6, 16, 6); layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
+                            textSize = 12f
+                            val bgAttr = if (isChosen) com.google.android.material.R.attr.colorPrimaryContainer else com.google.android.material.R.attr.colorSurfaceVariant
+                            val textAttr = if (isChosen) com.google.android.material.R.attr.colorOnPrimaryContainer else com.google.android.material.R.attr.colorOnSurfaceVariant
+                            setTextColor(ctx.getColorAttr(textAttr))
+                            background = GradientDrawable().apply { 
+                                setColor(ctx.getColorAttr(bgAttr))
+                                cornerRadius = 24f
+                                if (isChosen) setStroke(2, ctx.getColorAttr(com.google.android.material.R.attr.colorPrimary))
+                            }
+                            setPadding(16, 8, 16, 8)
+                            layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
+                            setOnClickListener { onReactionToggle?.invoke(message, emojiStr) }
                         }
                         holder.reactionsContainer.addView(tv)
                     }
@@ -251,7 +263,6 @@ class MessageAdapter(
             } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
         } else holder.reactionsContainer.visibility = View.GONE
 
-        val msgCal = Calendar.getInstance().apply { timeInMillis = message.date * 1000 }
         val dateStr = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(message.date * 1000))
         val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${minFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
         holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
@@ -269,7 +280,6 @@ class MessageAdapter(
             }
         }
         
-        // 长按空白区域，或单击气泡区域触发菜单。气泡文本长按不受阻。
         holder.mainMessageContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
         holder.bubbleContainer.setOnClickListener { v -> if (!message.isDeleted) onClick?.invoke(message, v) }
     }

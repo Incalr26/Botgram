@@ -15,12 +15,14 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
         android:layout_marginBottom="8dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
-        android:textSize="12sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
+        android:focusable="true"
+        android:clickable="true"
         android:visibility="gone" />
 
     <LinearLayout
@@ -31,10 +33,11 @@
         android:clipChildren="false">
 
         <FrameLayout
+            android:id="@+id/avatarContainer"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginEnd="8dp"
-            android:layout_gravity="bottom">
+            android:layout_gravity="top">
             <TextView
                 android:id="@+id/avatarFallback"
                 android:layout_width="match_parent"
@@ -42,7 +45,7 @@
                 android:background="@drawable/avatar_bg"
                 android:gravity="center"
                 android:textColor="@android:color/white"
-                android:textSize="18sp"
+                android:textSize="16sp"
                 android:textStyle="bold" />
             <ImageView
                 android:id="@+id/avatar"
@@ -55,7 +58,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:maxWidth="300dp">
+            android:maxWidth="280dp">
 
             <LinearLayout
                 android:id="@+id/bubbleContainer"
@@ -92,6 +95,7 @@
                     android:background="?attr/colorSurfaceVariant"
                     android:padding="6dp"
                     android:layout_marginBottom="6dp"
+                    android:minWidth="180dp"
                     android:visibility="gone">
                     <View
                         android:layout_width="3dp"
@@ -119,48 +123,46 @@
                     <com.google.android.material.card.MaterialCardView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:cardCornerRadius="8dp"
+                        app:cardCornerRadius="12dp"
                         app:cardElevation="0dp"
-                        app:cardBackgroundColor="@android:color/transparent">
+                        app:cardBackgroundColor="#212121">
                         <FrameLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:minWidth="150dp"
-                            android:minHeight="150dp">
+                            android:layout_width="240dp"
+                            android:layout_height="240dp">
                             <ImageView
                                 android:id="@+id/mediaImage"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:adjustViewBounds="true"
-                                android:maxWidth="260dp"
-                                android:maxHeight="320dp" />
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:scaleType="centerCrop" />
                             
                             <FrameLayout
                                 android:id="@+id/mediaOverlay"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="#90000000"
-                                android:visibility="gone">
-                                <LinearLayout
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
+                                android:background="#333333">
+                                <com.google.android.material.card.MaterialCardView
+                                    android:layout_width="56dp"
+                                    android:layout_height="56dp"
                                     android:layout_gravity="center"
-                                    android:gravity="center"
-                                    android:orientation="vertical">
+                                    app:cardCornerRadius="28dp"
+                                    app:cardElevation="0dp"
+                                    app:cardBackgroundColor="?attr/colorPrimaryContainer">
                                     <ImageView
                                         android:id="@+id/mediaOverlayIcon"
-                                        android:layout_width="36dp"
-                                        android:layout_height="36dp"
+                                        android:layout_width="28dp"
+                                        android:layout_height="28dp"
+                                        android:layout_gravity="center"
                                         android:src="@drawable/ic_download_media"
-                                        app:tint="@android:color/white" />
-                                    <TextView
-                                        android:id="@+id/mediaOverlaySize"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:textColor="@android:color/white"
-                                        android:textSize="12sp"
-                                        android:layout_marginTop="4dp" />
-                                </LinearLayout>
+                                        app:tint="?attr/colorOnPrimaryContainer" />
+                                </com.google.android.material.card.MaterialCardView>
+                                <TextView
+                                    android:id="@+id/mediaOverlaySize"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center_horizontal|bottom"
+                                    android:layout_marginBottom="16dp"
+                                    android:textColor="@android:color/white"
+                                    android:textSize="12sp" />
                             </FrameLayout>
                         </FrameLayout>
                     </com.google.android.material.card.MaterialCardView>
@@ -185,6 +187,7 @@
                             android:id="@+id/fileIcon"
                             android:layout_width="32dp"
                             android:layout_height="32dp"
+                            android:src="@drawable/ic_file_document"
                             app:tint="?attr/colorPrimary" />
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -231,8 +234,7 @@
                     android:id="@+id/reactionsContainer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:visibility="gone" />
+                    android:orientation="horizontal" />
             </HorizontalScrollView>
 
             <TextView
