@@ -177,21 +177,21 @@ class ChatInfoActivity : AppCompatActivity() {
         }
 
         val basicInfo = mutableListOf<Pair<String, String>>()
-        basicInfo.add("会话 唯一标识 (Chat ID)" to chat.getLong("id").toString())
+        basicInfo.add("ID" to chat.getLong("id").toString())
         val type = chat.getString("type")
         val username = chat.optString("username")
-        basicInfo.add("会话专属类型" to when (type) { "private" -> "双人私聊会话"; "group" -> "常规普通群组"; "supergroup" -> if (username.isNotEmpty()) "公开超级群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开新闻频道" else "私密新闻频道"; else -> type })
+        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "常规普通群组"; "supergroup" -> if (username.isNotEmpty()) "公开超级群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
         if (username.isNotEmpty()) {
-            if (type == "private") basicInfo.add("Telegram 唯一代号" to "@$username") else basicInfo.add("公网永久访问指引" to "https://t.me/$username")
+            if (type == "private") basicInfo.add("用户名(username)" to "@$username") else basicInfo.add("公开链接" to "https://t.me/$username")
         }
-        addCard("核心基础凭证", basicInfo)
+        addCard("基本信息", basicInfo)
 
         val descInfo = mutableListOf<Pair<String, String>>()
-        if (chat.has("bio")) descInfo.add("个人主页简介 (Bio)" to chat.getString("bio"))
-        if (chat.has("description")) descInfo.add("公用描述细则 (Description)" to chat.getString("description"))
-        if (chat.has("member_count")) descInfo.add("在线成员总额数" to "${chat.getInt("member_count")} 人")
-        if (chat.has("invite_link")) descInfo.add("活期专属邀请链接" to chat.getString("invite_link"))
-        addCard("可追溯详尽资料", descInfo)
+        if (chat.has("bio")) descInfo.add("简介 (Bio)" to chat.getString("bio"))
+        if (chat.has("description")) descInfo.add("简介 (Description)" to chat.getString("description"))
+        if (chat.has("member_count")) descInfo.add("在线成员总数" to "${chat.getInt("member_count")} 人")
+        if (chat.has("invite_link")) descInfo.add("专属邀请链接" to chat.getString("invite_link"))
+        addCard("详细资料", descInfo)
 
         val permObj = chat.optJSONObject("permissions")
         if (permObj != null) addPermissionCard(permObj)
@@ -199,9 +199,9 @@ class ChatInfoActivity : AppCompatActivity() {
         // 追加扩展系统项内容
         val extraInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("slow_mode_delay")) extraInfo.add("慢速限频控制(单位秒)" to "${chat.getInt("slow_mode_delay")} 秒")
-        extraInfo.add("内容外流防范保护" to if (chat.optBoolean("has_protected_content", false)) "强力限制 (不可转发/不可保存)" else "未开启限制")
+        extraInfo.add("内容外流防范保护(限制保存与转发内容)" to if (chat.optBoolean("has_protected_content", false)) "开启限制 (限制保存与转发内容)" else "未开启限制")
         if (chat.has("message_auto_delete_time")) extraInfo.add("阅后即焚自动焚毁" to "${chat.getInt("message_auto_delete_time")} 秒")
-        addCard("安全与高级策略拓扑", extraInfo)
+        addCard("高级设置与其他", extraInfo)
     }
 
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }
