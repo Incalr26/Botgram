@@ -9,7 +9,7 @@
     <com.google.android.material.appbar.AppBarLayout
         android:id="@+id/appBarLayout"
         android:layout_width="match_parent"
-        android:layout_height="280dp"
+        android:layout_height="320dp"
         android:fitsSystemWindows="true"
         android:background="?attr/colorSurface">
 
@@ -22,7 +22,7 @@
             app:statusBarScrim="?attr/colorSurface"
             app:titleCollapseMode="scale"
             app:expandedTitleMarginStart="24dp"
-            app:expandedTitleMarginBottom="28dp"
+            app:expandedTitleMarginBottom="24dp"
             app:collapsedTitleTextColor="?attr/colorOnSurface"
             app:expandedTitleTextColor="@android:color/white"
             app:layout_scrollFlags="scroll|exitUntilCollapsed">

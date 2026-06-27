@@ -14,15 +14,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="8dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
+        android:layout_marginBottom="4dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         android:paddingTop="6dp"
         android:paddingBottom="6dp"
         android:textSize="13sp"
         android:textColor="?attr/colorOnSurfaceVariant"
-        android:focusable="true"
-        android:clickable="true"
         android:visibility="gone" />
 
     <LinearLayout
@@ -45,7 +43,7 @@
                 android:background="@drawable/avatar_bg"
                 android:gravity="center"
                 android:textColor="@android:color/white"
-                android:textSize="16sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
             <ImageView
                 android:id="@+id/avatar"
@@ -58,7 +56,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:maxWidth="280dp">
+            android:maxWidth="300dp">
 
             <LinearLayout
                 android:id="@+id/bubbleContainer"
@@ -89,28 +87,28 @@
 
                 <LinearLayout
                     android:id="@+id/replyContainer"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:background="?attr/colorSurfaceVariant"
                     android:padding="6dp"
                     android:layout_marginBottom="6dp"
-                    android:minWidth="180dp"
                     android:visibility="gone">
                     <View
                         android:layout_width="3dp"
                         android:layout_height="match_parent"
                         android:background="?attr/colorPrimary" />
                     <LinearLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:layout_marginStart="6dp">
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                            <TextView android:id="@+id/replyName" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textSize="12sp" android:textColor="?attr/colorPrimary" android:textStyle="bold" android:singleLine="true"/>
-                            <TextView android:id="@+id/replyMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="10sp" android:textColor="?attr/colorOnSurfaceVariant" />
+                        android:layout_marginStart="6dp"
+                        android:maxWidth="250dp">
+                        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
+                            <TextView android:id="@+id/replyName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="?attr/colorPrimary" android:textStyle="bold" android:singleLine="true"/>
+                            <TextView android:id="@+id/replyMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:textSize="10sp" android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
-                        <TextView android:id="@+id/replyPreview" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="13sp" android:textColor="?attr/colorOnSurface" android:maxLines="2" android:ellipsize="end" />
+                        <TextView android:id="@+id/replyPreview" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="13sp" android:textColor="?attr/colorOnSurface" android:maxLines="2" android:ellipsize="end" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -123,46 +121,48 @@
                     <com.google.android.material.card.MaterialCardView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:cardCornerRadius="12dp"
+                        app:cardCornerRadius="8dp"
                         app:cardElevation="0dp"
-                        app:cardBackgroundColor="#212121">
+                        app:cardBackgroundColor="@android:color/transparent">
                         <FrameLayout
-                            android:layout_width="240dp"
-                            android:layout_height="240dp">
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="150dp"
+                            android:minHeight="150dp">
                             <ImageView
                                 android:id="@+id/mediaImage"
-                                android:layout_width="match_parent"
-                                android:layout_height="match_parent"
-                                android:scaleType="centerCrop" />
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:adjustViewBounds="true"
+                                android:maxWidth="260dp"
+                                android:maxHeight="320dp" />
                             
                             <FrameLayout
                                 android:id="@+id/mediaOverlay"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
-                                android:background="#333333">
-                                <com.google.android.material.card.MaterialCardView
-                                    android:layout_width="56dp"
-                                    android:layout_height="56dp"
-                                    android:layout_gravity="center"
-                                    app:cardCornerRadius="28dp"
-                                    app:cardElevation="0dp"
-                                    app:cardBackgroundColor="?attr/colorPrimaryContainer">
-                                    <ImageView
-                                        android:id="@+id/mediaOverlayIcon"
-                                        android:layout_width="28dp"
-                                        android:layout_height="28dp"
-                                        android:layout_gravity="center"
-                                        android:src="@drawable/ic_download_media"
-                                        app:tint="?attr/colorOnPrimaryContainer" />
-                                </com.google.android.material.card.MaterialCardView>
-                                <TextView
-                                    android:id="@+id/mediaOverlaySize"
+                                android:background="#90000000"
+                                android:visibility="gone">
+                                <LinearLayout
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_gravity="center_horizontal|bottom"
-                                    android:layout_marginBottom="16dp"
-                                    android:textColor="@android:color/white"
-                                    android:textSize="12sp" />
+                                    android:layout_gravity="center"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+                                    <ImageView
+                                        android:id="@+id/mediaOverlayIcon"
+                                        android:layout_width="36dp"
+                                        android:layout_height="36dp"
+                                        android:src="@drawable/ic_download_media"
+                                        app:tint="@android:color/white" />
+                                    <TextView
+                                        android:id="@+id/mediaOverlaySize"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="12sp"
+                                        android:layout_marginTop="4dp" />
+                                </LinearLayout>
                             </FrameLayout>
                         </FrameLayout>
                     </com.google.android.material.card.MaterialCardView>
@@ -187,7 +187,6 @@
                             android:id="@+id/fileIcon"
                             android:layout_width="32dp"
                             android:layout_height="32dp"
-                            android:src="@drawable/ic_file_document"
                             app:tint="?attr/colorPrimary" />
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -225,18 +224,6 @@
                     android:linksClickable="true" />
             </LinearLayout>
 
-            <HorizontalScrollView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:scrollbars="none"
-                android:layout_marginTop="4dp">
-                <LinearLayout
-                    android:id="@+id/reactionsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
-
             <TextView
                 android:id="@+id/messageInfo"
                 android:layout_width="wrap_content"
@@ -247,4 +234,19 @@
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
+
+    <HorizontalScrollView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:scrollbars="none"
+        android:layout_gravity="start"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="4dp">
+        <LinearLayout
+            android:id="@+id/reactionsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone" />
+    </HorizontalScrollView>
 </LinearLayout>

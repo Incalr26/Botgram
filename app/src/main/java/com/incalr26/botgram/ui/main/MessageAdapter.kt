@@ -7,8 +7,11 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.TextPaint
+import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.text.style.URLSpan
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -24,6 +27,7 @@ import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.local.entity.MessageEntity
 import com.incalr26.botgram.util.AvatarHelper
@@ -44,8 +48,7 @@ class MessageAdapter(
     private val onReactionToggle: ((MessageEntity, String) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
-    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    private val minFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun formatSize(size: Long): String {
@@ -80,7 +83,6 @@ class MessageAdapter(
         
         var boundMessageId: Long = 0L
         var loadJob: Job? = null
-        var mediaJob: Job? = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -97,7 +99,6 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
-        // 解析进群或移除等系统事件提示
         if (rawObj.has("new_chat_members") || rawObj.has("left_chat_member") || rawObj.has("pinned_message") || rawObj.has("new_chat_title")) {
             holder.mainMessageContainer.visibility = View.GONE
             holder.systemMessageText.visibility = View.VISIBLE
@@ -116,7 +117,6 @@ class MessageAdapter(
             } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改群名称为 ${rawObj.getString("new_chat_title")}" }
             holder.systemMessageText.text = sysTxt
             
-            // 系统提示绑定长按菜单与发起人详情页跳转
             holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
             holder.systemMessageText.setOnClickListener { onAvatarClick?.invoke(message) }
             return
@@ -169,7 +169,6 @@ class MessageAdapter(
 
         holder.mediaContainer.visibility = View.GONE
         holder.fileContainer.visibility = View.GONE
-        holder.mediaJob?.cancel()
         
         val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
         val token = prefs.getString("bot_token", "") ?: ""
@@ -198,7 +197,7 @@ class MessageAdapter(
             val loadMedia = {
                 holder.mediaOverlay.visibility = View.GONE
                 if (!isOutgoing) { unlockedSet.add(currentMsgId.toString()); prefs.edit().putStringSet("unlocked_media", unlockedSet).apply() }
-                holder.mediaJob = scope.launch {
+                scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
                     if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
                         Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
@@ -229,7 +228,7 @@ class MessageAdapter(
             holder.messageText.text = builder
         }
 
-        // 解析多项表情回应并判断自身是否已激活高亮
+        // 解析并排展示多个表情响应，点击可以移除
         holder.reactionsContainer.removeAllViews()
         if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
             try {
@@ -240,7 +239,7 @@ class MessageAdapter(
                         val r = arr.getJSONObject(i)
                         val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") r.getJSONObject("type").optString("emoji", "❓") else r.optString("emoji", "❓")
                         val count = if (r.has("total_count")) r.getInt("total_count") else r.optInt("count", 1)
-                        val isChosen = r.optBoolean("chosen", false) // 判断自身是否已回应
+                        val isChosen = r.optBoolean("chosen", false)
                         
                         val tv = TextView(ctx).apply {
                             text = "$emojiStr $count"
@@ -250,11 +249,10 @@ class MessageAdapter(
                             setTextColor(ctx.getColorAttr(textAttr))
                             background = GradientDrawable().apply { 
                                 setColor(ctx.getColorAttr(bgAttr))
-                                cornerRadius = 24f
+                                cornerRadius = 32f
                                 if (isChosen) setStroke(2, ctx.getColorAttr(com.google.android.material.R.attr.colorPrimary))
                             }
-                            setPadding(16, 8, 16, 8)
-                            layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
+                            setPadding(16, 6, 16, 6); layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
                             setOnClickListener { onReactionToggle?.invoke(message, emojiStr) }
                         }
                         holder.reactionsContainer.addView(tv)
@@ -263,9 +261,8 @@ class MessageAdapter(
             } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
         } else holder.reactionsContainer.visibility = View.GONE
 
-        val dateStr = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(message.date * 1000))
-        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${minFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
-        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
+        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${timeFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
+        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()
         if (!isOutgoing && prefs.getBoolean("use_real_avatar", true) && message.senderUserId != null) {
@@ -280,8 +277,9 @@ class MessageAdapter(
             }
         }
         
-        holder.mainMessageContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
         holder.bubbleContainer.setOnClickListener { v -> if (!message.isDeleted) onClick?.invoke(message, v) }
+        // 关键：不拦截长按文本操作，长按空白处才会触发菜单
+        holder.mainMessageContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
     }
     
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }
