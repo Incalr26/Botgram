@@ -8,6 +8,7 @@ import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextPaint
+import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
@@ -48,7 +49,8 @@ class MessageAdapter(
     private val onReactionToggle: ((MessageEntity, String) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
-    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private val minFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun formatSize(size: Long): String {
@@ -109,16 +111,13 @@ class MessageAdapter(
             if (rawObj.has("new_chat_members")) {
                 val arr = rawObj.getJSONArray("new_chat_members"); val names = mutableListOf<String>()
                 for(i in 0 until arr.length()) names.add(arr.getJSONObject(i).optString("first_name", ""))
-                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入群组"
+                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入"
             } else if (rawObj.has("left_chat_member")) {
                 val left = rawObj.getJSONObject("left_chat_member").optString("first_name", "")
                 sysTxt = if (doer == left) "$doer 离开了聊天" else "$doer 移除了 $left"
             } else if (rawObj.has("pinned_message")) { sysTxt = "$doer 置顶了消息"
-            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改群名称为 ${rawObj.getString("new_chat_title")}" }
+            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称为 ${rawObj.getString("new_chat_title")}" }
             holder.systemMessageText.text = sysTxt
-            
-            holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
-            holder.systemMessageText.setOnClickListener { onAvatarClick?.invoke(message) }
             return
         }
 
@@ -225,10 +224,19 @@ class MessageAdapter(
                 builder.setSpan(ForegroundColorSpan(Color.parseColor("#D32F2F")), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
+            // 修复超链接功能拦截
+            val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
+            for (urlSpan in urlSpans) {
+                val start = builder.getSpanStart(urlSpan); val end = builder.getSpanEnd(urlSpan); builder.removeSpan(urlSpan)
+                builder.setSpan(object : ClickableSpan() {
+                    override fun onClick(w: View) { MaterialAlertDialogBuilder(ctx).setTitle("打开链接").setMessage(urlSpan.url).setPositiveButton("打开") { _, _ -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) }.setNegativeButton("取消", null).show() }
+                    override fun updateDrawState(ds: TextPaint) { super.updateDrawState(ds); ds.isUnderlineText = true }
+                }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
             holder.messageText.text = builder
+            holder.messageText.movementMethod = LinkMovementMethod.getInstance()
         }
 
-        // 解析并排展示多个表情响应，点击可以移除
         holder.reactionsContainer.removeAllViews()
         if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
             try {
@@ -261,8 +269,9 @@ class MessageAdapter(
             } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
         } else holder.reactionsContainer.visibility = View.GONE
 
-        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${timeFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
-        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  ${timeFormat.format(Date(message.date * 1000))}$editStr"
+        val dateStr = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(message.date * 1000))
+        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${minFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
+        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()
         if (!isOutgoing && prefs.getBoolean("use_real_avatar", true) && message.senderUserId != null) {
@@ -278,7 +287,6 @@ class MessageAdapter(
         }
         
         holder.bubbleContainer.setOnClickListener { v -> if (!message.isDeleted) onClick?.invoke(message, v) }
-        // 关键：不拦截长按文本操作，长按空白处才会触发菜单
         holder.mainMessageContainer.setOnLongClickListener { v -> if (!message.isDeleted) onLongClick?.invoke(message, v) ?: false else true }
     }
     

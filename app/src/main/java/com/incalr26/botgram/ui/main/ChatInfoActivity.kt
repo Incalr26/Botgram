@@ -47,6 +47,9 @@ class ChatInfoActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
+        // 强行把状态栏设为 colorSurface 解决发灰不统一
+        window.statusBarColor = getColorAttr(com.google.android.material.R.attr.colorSurface)
+
         val appBarLayout = findViewById<AppBarLayout>(R.id.appBarLayout)
         val miniAvatar = findViewById<ImageView>(R.id.miniToolbarAvatar)
         miniAvatar.setOnClickListener { appBarLayout.setExpanded(true, true) }
@@ -124,12 +127,12 @@ class ChatInfoActivity : AppCompatActivity() {
         fun addPermissionCard(permObj: JSONObject) {
             val card = MaterialCardView(this).apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }; radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant)) }
             val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
-            layout.addView(TextView(this).apply { text = "群组管理权限 (Bot身份)"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) })
+            layout.addView(TextView(this).apply { text = "群组权限管理"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) })
             
             val pMap = mapOf(
-                "can_send_messages" to "允许发送消息", "can_send_audios" to "允许发送音频", "can_send_documents" to "允许发送文件",
-                "can_send_photos" to "允许发送图片", "can_send_videos" to "允许发送视频", "can_send_polls" to "允许发起投票",
-                "can_change_info" to "允许修改群资料", "can_invite_users" to "允许邀请成员", "can_pin_messages" to "允许置顶消息"
+                "can_send_messages" to "发送消息", "can_send_audios" to "发送音频", "can_send_documents" to "发送文件",
+                "can_send_photos" to "发送图片", "can_send_videos" to "发送视频", "can_send_polls" to "发起投票",
+                "can_change_info" to "修改群资料", "can_invite_users" to "邀请成员", "can_pin_messages" to "置顶消息"
             )
             pMap.forEach { (key, cnName) ->
                 if (permObj.has(key)) {
@@ -148,7 +151,14 @@ class ChatInfoActivity : AppCompatActivity() {
                                     val apiParams = JSONObject().apply { put("chat_id", chatId); put("permissions", currentPerms) }
                                     val req = Request.Builder().url("https://api.telegram.org/bot$botToken/setChatPermissions").post(apiParams.toString().toRequestBody("application/json".toMediaTypeOrNull())).build()
                                     val res = ApiClient.getClient().newCall(req).execute()
-                                    withContext(Dispatchers.Main) { if (!(res.isSuccessful && JSONObject(res.body?.string() ?: "").optBoolean("ok", false))) { Toast.makeText(this@ChatInfoActivity, "权限不足", Toast.LENGTH_SHORT).show(); isChecked = !checked } }
+                                    withContext(Dispatchers.Main) {
+                                        if (res.isSuccessful && JSONObject(res.body?.string() ?: "").optBoolean("ok", false)) {
+                                            Toast.makeText(this@ChatInfoActivity, "修改成功", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(this@ChatInfoActivity, "修改失败，权限不足", Toast.LENGTH_SHORT).show()
+                                            isChecked = !checked
+                                        }
+                                    }
                                 } catch (e: Exception) { withContext(Dispatchers.Main) { isChecked = !checked } }
                             }
                         }
@@ -163,7 +173,7 @@ class ChatInfoActivity : AppCompatActivity() {
         basicInfo.add("ID" to chat.getLong("id").toString())
         val type = chat.getString("type")
         val username = chat.optString("username")
-        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开群组" else "私密超级群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
+        basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "普通群组"; "supergroup" -> if (username.isNotEmpty()) "公开群组" else "私密群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
         if (username.isNotEmpty()) {
             if (type == "private") basicInfo.add("用户名" to "@$username") else basicInfo.add("公开链接" to "https://t.me/$username")
         }
@@ -172,8 +182,8 @@ class ChatInfoActivity : AppCompatActivity() {
         val descInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("bio")) descInfo.add("简介" to chat.getString("bio"))
         if (chat.has("description")) descInfo.add("简介" to chat.getString("description"))
-        if (chat.has("member_count")) descInfo.add("成员总数" to "${chat.getInt("member_count")} 人")
-        if (chat.has("invite_link")) descInfo.add("专属邀请链接" to chat.getString("invite_link"))
+        if (chat.has("member_count")) descInfo.add("成员数" to "${chat.getInt("member_count")} 人")
+        if (chat.has("invite_link")) descInfo.add("邀请链接" to chat.getString("invite_link"))
         addCard("详细资料", descInfo)
 
         val permObj = chat.optJSONObject("permissions")
@@ -181,9 +191,9 @@ class ChatInfoActivity : AppCompatActivity() {
 
         val extraInfo = mutableListOf<Pair<String, String>>()
         if (chat.has("slow_mode_delay")) extraInfo.add("慢速模式延迟" to "${chat.getInt("slow_mode_delay")} 秒")
-        if (chat.has("has_protected_content") && chat.getBoolean("has_protected_content")) extraInfo.add("内容保护" to "已开启 (禁止转发与保存)")
-        if (chat.has("message_auto_delete_time")) extraInfo.add("消息自动删除时间" to "${chat.getInt("message_auto_delete_time")} 秒")
-        addCard("系统与高级设置", extraInfo)
+        extraInfo.add("禁止转发与保存" to if (chat.optBoolean("has_protected_content", false)) "是" else "否")
+        if (chat.has("message_auto_delete_time")) extraInfo.add("自动删除时间" to "${chat.getInt("message_auto_delete_time")} 秒")
+        addCard("系统与设置", extraInfo)
     }
 
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }
