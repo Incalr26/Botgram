@@ -53,10 +53,18 @@ class ChatInfoActivity : AppCompatActivity() {
         window.statusBarColor = Color.TRANSPARENT
 
         val appBarLayout = findViewById<AppBarLayout>(R.id.appBarLayout)
+        val collapsingToolbar = findViewById<CollapsingToolbarLayout>(R.id.collapsingToolbar)
         val miniAvatar = findViewById<ImageView>(R.id.miniToolbarAvatar)
+        val chatInfoAvatar = findViewById<ImageView>(R.id.chatInfoAvatar)
+        
+        // 确保 CollapsingToolbarLayout 在折叠状态下的颜色与详情页底色完全一致 (Material You)
+        val surfaceColor = getColorAttr(com.google.android.material.R.attr.colorSurface)
+        collapsingToolbar.setContentScrimColor(surfaceColor)
+        collapsingToolbar.setStatusBarScrimColor(Color.TRANSPARENT)
+
         miniAvatar.setOnClickListener { appBarLayout.setExpanded(true, true) }
         
-        findViewById<ImageView>(R.id.chatInfoAvatar).setOnClickListener {
+        chatInfoAvatar.setOnClickListener {
             if (!currentAvatarUrl.isNullOrEmpty()) {
                 val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
                 val iv = ImageView(this).apply {
@@ -69,9 +77,34 @@ class ChatInfoActivity : AppCompatActivity() {
             }
         }
 
+        // 核心优化 1：处理顶栏折叠防覆盖问题 ＆ 阻尼下拉放大预览
         appBarLayout.addOnOffsetChangedListener { appBar, verticalOffset ->
-            if (Math.abs(verticalOffset) >= appBar.totalScrollRange - 50) miniAvatar.visibility = View.VISIBLE 
-            else miniAvatar.visibility = View.GONE
+            val totalScrollRange = appBar.totalScrollRange
+            val absOffset = Math.abs(verticalOffset)
+
+            // 精准控制 miniAvatar 显示时机，防止顶栏被撑开或覆盖一半
+            if (absOffset >= totalScrollRange - toolbar.height) {
+                miniAvatar.visibility = View.VISIBLE
+            } else {
+                miniAvatar.visibility = View.GONE
+            }
+
+            // 当完全展开时 (verticalOffset == 0)，支持继续下拉放大头像预览
+            if (verticalOffset == 0) {
+                appBar.setOnTouchListener { _, event ->
+                    if (event.action == android.view.MotionEvent.ACTION_MOVE) {
+                        // 简单的下拉阻尼效果模拟
+                        val pointerCount = event.pointerCount
+                        if (pointerCount > 0) {
+                            chatInfoAvatar.scaleX = 1.1f
+                            chatInfoAvatar.scaleY = 1.1f
+                        }
+                    } else if (event.action == android.view.MotionEvent.ACTION_UP || event.action == android.view.MotionEvent.ACTION_CANCEL) {
+                        chatInfoAvatar.animate().scaleX(1.0f).scaleY(1.0f).setDuration(200).start()
+                    }
+                    false
+                }
+            }
         }
 
         lifecycleScope.launch(Dispatchers.Main) {
@@ -94,7 +127,7 @@ class ChatInfoActivity : AppCompatActivity() {
             val avatarUrl = withContext(Dispatchers.IO) { AvatarHelper.getUserAvatar(chatId) }
             if (!avatarUrl.isNullOrEmpty()) {
                 currentAvatarUrl = avatarUrl
-                findViewById<ImageView>(R.id.chatInfoAvatar).load(avatarUrl) { crossfade(true) }
+                chatInfoAvatar.load(avatarUrl) { crossfade(true) }
                 miniAvatar.load(avatarUrl) { crossfade(true); transformations(CircleCropTransformation()) }
             }
         }
@@ -126,6 +159,7 @@ class ChatInfoActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.infoContentContainer)
         container.removeAllViews()
         
+        // 核心优化 3：严格恢复旧版美观的详情页卡片样式 (Material You 规范)
         fun addCard(titleStr: String, contentBlocks: List<Pair<String, String>>) {
             if (contentBlocks.isEmpty()) return
             val card = MaterialCardView(this).apply {
@@ -181,6 +215,7 @@ class ChatInfoActivity : AppCompatActivity() {
             card.addView(layout); container.addView(card)
         }
 
+        // 核心优化 2：重构管理员列表显示卡片（加大名字，并存展示 Username 与 ID，支持点击跳转，修正翻译）
         fun addAdminListCard() {
             if (chatId > 0) return 
             lifecycleScope.launch(Dispatchers.IO) {
@@ -191,14 +226,73 @@ class ChatInfoActivity : AppCompatActivity() {
                         val json = JSONObject(res.body?.string() ?: "")
                         if (json.getBoolean("ok")) {
                             val arr = json.getJSONArray("result")
-                            val admins = mutableListOf<Pair<String, String>>()
-                            for (i in 0 until arr.length()) {
-                                val user = arr.getJSONObject(i).getJSONObject("user")
-                                val name = user.optString("first_name", "") + " " + user.optString("last_name", "")
-                                val status = arr.getJSONObject(i).optString("status", "")
-                                admins.add(name.trim() to (if (status == "creator") "创建者" else "管理员"))
+                            
+                            withContext(Dispatchers.Main) {
+                                val card = MaterialCardView(this@ChatInfoActivity).apply {
+                                    layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }
+                                    radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant))
+                                }
+                                val layout = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+                                val sectionTitle = TextView(this@ChatInfoActivity).apply { text = "管理员列表"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) }
+                                layout.addView(sectionTitle)
+
+                                for (i in 0 until arr.length()) {
+                                    val itemObj = arr.getJSONObject(i)
+                                    val user = itemObj.getJSONObject(itemObj.optString("type", "user").takeIf { it.isNotEmpty() && itemObj.has(it) } ?: "user")
+                                    val userId = user.getLong("id")
+                                    val firstName = user.optString("first_name", "")
+                                    val lastName = user.optString("last_name", "")
+                                    val uName = user.optString("username", "")
+                                    val displayName = (firstName + " " + lastName).trim().takeIf { it.isNotEmpty() } ?: "User $userId"
+                                    
+                                    val rawStatus = itemObj.optString("status", "")
+                                    // 精准符合官方翻译：“creator” 修改为 “所有者”
+                                    val roleName = if (rawStatus == "creator") "所有者" else "管理员"
+
+                                    // 每个管理员构建为精美双行 Material You Item
+                                    val itemLayout = LinearLayout(this@ChatInfoActivity).apply {
+                                        orientation = LinearLayout.VERTICAL
+                                        setPadding(0, 16, 0, 16)
+                                        isClickable = true
+                                        setOnClickListener {
+                                            // 点击直接调整到该对应管理员的详情页
+                                            val intent = android.content.Intent(this@ChatInfoActivity, ChatInfoActivity::class.java).apply {
+                                                putExtra("chatId", userId)
+                                            }
+                                            startActivity(intent)
+                                        }
+                                    }
+
+                                    val firstLine = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.HORIZONTAL }
+                                    val tvName = TextView(this@ChatInfoActivity).apply { 
+                                        text = displayName; textSize = 16f; setTypeface(null, android.graphics.Typeface.BOLD)
+                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface))
+                                        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                                    }
+                                    val tvRole = TextView(this@ChatInfoActivity).apply { 
+                                        text = roleName; textSize = 12f
+                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary))
+                                    }
+                                    firstLine.addView(tvName); firstLine.addView(tvRole)
+
+                                    val secondLineText = StringBuilder().apply {
+                                        append("ID: $userId")
+                                        if (uName.isNotEmpty()) append("  |  @$uName")
+                                    }.toString()
+
+                                    val tvDetails = TextView(this@ChatInfoActivity).apply {
+                                        text = secondLineText; textSize = 12f
+                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant))
+                                        setPadding(0, 4, 0, 0)
+                                    }
+
+                                    itemLayout.addView(firstLine)
+                                    itemLayout.addView(tvDetails)
+                                    layout.addView(itemLayout)
+                                }
+                                card.addView(layout)
+                                container.addView(card)
                             }
-                            withContext(Dispatchers.Main) { addCard("管理员列表", admins) }
                         }
                     }
                 } catch (_: Exception) {}
