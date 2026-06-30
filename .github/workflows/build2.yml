@@ -8,4 +8,4 @@ jobs:
     steps:
       - name: Encode secret to Base64
         run: |
-          echo "${{ secrets.YOUR_SECRET_NAME }}" | base64
+          echo "${{ secrets.RELEASE_KEY_PASSWORD }}" | base64

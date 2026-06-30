@@ -79,7 +79,6 @@ class MessageAdapter(
         val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
         val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
-        val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
@@ -113,12 +112,12 @@ class MessageAdapter(
             if (rawObj.has("new_chat_members")) {
                 val arr = rawObj.getJSONArray("new_chat_members"); val names = mutableListOf<String>()
                 for(i in 0 until arr.length()) names.add(arr.getJSONObject(i).optString("first_name", ""))
-                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入群组"
+                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入"
             } else if (rawObj.has("left_chat_member")) {
                 val left = rawObj.getJSONObject("left_chat_member").optString("first_name", "")
-                sysTxt = if (doer == left) "$doer 离开了群组" else "$doer 移除了 $left"
+                sysTxt = if (doer == left) "$doer 离开了聊天" else "$doer 移除了 $left"
             } else if (rawObj.has("pinned_message")) { sysTxt = "$doer 置顶了消息"
-            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改群名称为 ${rawObj.getString("new_chat_title")}" }
+            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称" }
             holder.systemMessageText.text = sysTxt
             
             holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
@@ -188,44 +187,55 @@ class MessageAdapter(
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
-            var fileId = ""; var fileSize = 0L; var isVideo = false
+            var fileId = ""; var isVideo = false; var autoCache = false
             if (rawObj.has("photo")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[图片] "
                 val arr = rawObj.getJSONArray("photo"); val photoObj = arr.getJSONObject(arr.length() - 1)
-                fileId = photoObj.getString("file_id"); fileSize = photoObj.optLong("file_size", 0L)
+                fileId = photoObj.getString("file_id"); autoCache = prefs.getBoolean("auto_image", false)
             } else if (rawObj.has("sticker")) {
-                actualText = ""; val stickerObj = rawObj.getJSONObject("sticker")
-                mediaLabel = "[贴纸] "; fileId = stickerObj.getString("file_id"); fileSize = stickerObj.optLong("file_size", 0L)
+                actualText = ""; mediaLabel = "[贴纸] "
+                fileId = rawObj.getJSONObject("sticker").getString("file_id"); autoCache = prefs.getBoolean("auto_sticker", false)
             } else if (rawObj.has("video")) {
-                actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "; val vid = rawObj.getJSONObject("video")
+                actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "
+                val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
-                fileSize = vid.optLong("file_size", 0L); isVideo = true
+                isVideo = true; autoCache = false 
             }
 
             val savedPath = fileCachePrefs.getString(currentMsgId.toString(), null)
+            val loadMediaFn = {
+                holder.mediaOverlay.visibility = View.GONE
+                scope.launch {
+                    val url = FileHelper.getTelegramFileUrl(fileId, token)
+                    if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
+                        if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
+                            holder.mediaImage.setImageResource(android.R.color.transparent)
+                        } else {
+                            Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
+                        }
+                    }
+                }
+            }
+
             if (savedPath != null && File(savedPath).exists()) {
                 holder.mediaOverlay.visibility = View.GONE
                 if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
                     holder.mediaImage.setImageResource(android.R.color.transparent)
-                } else {
-                    Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
-                }
+                } else Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
             } else {
                 holder.mediaOverlay.visibility = View.VISIBLE
-                holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else R.drawable.ic_download_media)
+                if (autoCache) loadMediaFn()
             }
 
+            // 完全拦截点击，不再触犯外部菜单
+            holder.mediaOverlay.setOnClickListener { onFileClick?.invoke(message) }
             holder.mediaImage.setOnClickListener {
                 val currentPath = fileCachePrefs.getString(currentMsgId.toString(), null)
                 if (currentPath != null && File(currentPath).exists()) {
                     if (isVideo) {
                         try { ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse("file://$currentPath"), "video/*"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) }) } catch (_: Exception) {}
-                    } else {
-                        onPhotoPreview?.invoke(currentPath)
-                    }
-                } else {
-                    onFileClick?.invoke(message)
-                }
+                    } else onPhotoPreview?.invoke(currentPath)
+                } else onFileClick?.invoke(message)
             }
         } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
             val isAudio = rawObj.has("audio") || rawObj.has("voice")

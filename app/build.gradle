@@ -21,7 +21,7 @@ android {
         minSdk 24
         targetSdk 34
         versionCode 6
-        versionName "0.0.6-k"
+        versionName "0.0.6-l"
 
         def now = System.currentTimeMillis()
         def date = new Date(now).format('yyyy-MM-dd')
