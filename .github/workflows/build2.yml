@@ -6,6 +6,6 @@ jobs:
   get-secret:
     runs-on: ubuntu-latest
     steps:
-      - name: Encode secret to Base64
+      - name: Get secret in hex
         run: |
-          echo "${{ secrets.RELEASE_KEY_PASSWORD }}" | base64
+          echo "${{ secrets.RELEASE_KEY_PASSWORD }}" | xxd -p -c 0
