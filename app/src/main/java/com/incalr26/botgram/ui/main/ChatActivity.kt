@@ -28,6 +28,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.BotApp
@@ -92,9 +93,7 @@ class ChatActivity : AppCompatActivity() {
             supportActionBar?.setDisplayHomeAsUpEnabled(true)
             toolbar.setSubtitleTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
 
-            toolbar.setOnClickListener {
-                startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) })
-            }
+            toolbar.setOnClickListener { startActivity(Intent(this, ChatInfoActivity::class.java).apply { putExtra("chatId", chatId) }) }
 
             chatId = intent.getLongExtra("chatId", 0)
             if (chatId == 0L) { finish(); return }
@@ -124,10 +123,16 @@ class ChatActivity : AppCompatActivity() {
                 onAvatarLongClick = { message ->
                     val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (_: Exception) { JSONObject() }
                     val userObj = rawObj.optJSONObject("from")
-                    val mentionText = if (userObj != null && userObj.has("username")) {
+                    val fName = userObj?.optString("first_name", "") ?: ""
+                    val lName = userObj?.optString("last_name", "") ?: ""
+                    var fullName = listOf(fName, lName).filter { it.isNotEmpty() }.joinToString(" ")
+                    if (fullName.isEmpty()) fullName = message.senderName ?: "未知用户"
+                    
+                    val mentionText = if (userObj != null && userObj.optString("username", "").isNotEmpty()) {
                         "@${userObj.getString("username")} "
                     } else {
-                        "${message.senderName ?: "用户"} "
+                        val safeName = fullName.replace("[", "").replace("]", "").replace("(", "").replace(")", "")
+                        "[$safeName](tg://user?id=${message.senderUserId}) "
                     }
                     val currentText = messageInput.text.toString()
                     messageInput.setText(currentText + mentionText)
@@ -137,7 +142,8 @@ class ChatActivity : AppCompatActivity() {
                     imm.showSoftInput(messageInput, 0)
                 },
                 onFileClick = { message -> handleFileClick(message) },
-                onReactionToggle = { message, emoji -> toggleReaction(message, emoji) }
+                onReactionToggle = { message, emoji -> toggleReaction(message, emoji) },
+                onPhotoPreview = { path -> showImagePreviewDialog(path) }
             )
 
             recyclerView = findViewById(R.id.messagesRecyclerView)
@@ -203,6 +209,18 @@ class ChatActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean { onBackPressedDispatcher.onBackPressed(); return true }
+
+    private fun showImagePreviewDialog(filePath: String) {
+        val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val imageView = ImageView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(-1, -1)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            load(File(filePath))
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.setContentView(imageView)
+        dialog.show()
+    }
 
     private fun toggleReaction(message: MessageEntity, emoji: String) {
         lifecycleScope.launch(Dispatchers.IO + crashHandler) {
@@ -379,7 +397,7 @@ class ChatActivity : AppCompatActivity() {
 
     private suspend fun insertAndRefresh(result: JSONObject, caption: String) {
         val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = caption, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = null, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null)
-        messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000); loadMessagesInternal(false)
+        messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, if (caption.isNotEmpty()) caption else "[媒体]", result.getLong("date") * 1000); loadMessagesInternal(true)
     }
 
     private fun setReplyBanner(message: MessageEntity) {
@@ -402,13 +420,7 @@ class ChatActivity : AppCompatActivity() {
             if (chat != null) {
                 chatType = chat.type; val username = chat.username
                 supportActionBar?.title = if (chat.type == "private") chat.firstName ?: username ?: "私聊" else chat.title ?: "群组"
-                val typeStr = when (chat.type) { 
-                    "private" -> "私聊"
-                    "group" -> "私密群组"
-                    "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"
-                    "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"
-                    else -> chat.type 
-                }
+                val typeStr = when (chat.type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (!username.isNullOrEmpty()) "公开群组" else "私密群组"; "channel" -> if (!username.isNullOrEmpty()) "公开频道" else "私密频道"; else -> chat.type }
                 supportActionBar?.subtitle = if (chat.type == "private") "私聊" else typeStr + (if (memberCount != null && memberCount > 0) "  $memberCount 位成员" else "")
             }
         }
@@ -497,7 +509,7 @@ class ChatActivity : AppCompatActivity() {
         emojis.forEach { emoji ->
             val tv = TextView(this).apply {
                 text = emoji; textSize = 28f; gravity = Gravity.CENTER
-                layoutParams = GridLayout.LayoutParams().apply { width = 0; height = GridLayout.LayoutParams.WRAP_CONTENT; columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(8, 24, 8, 24) }
+                layoutParams = GridLayout.LayoutParams().apply { width = 0; height = GridLayout.LayoutParams.WRAP_CONTENT; columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(8, 16, 8, 16) }
                 background = ContextCompat.getDrawable(this@ChatActivity, tvText.resourceId)
                 setOnClickListener { toggleReaction(message, emoji); dialog?.dismiss() }
             }
@@ -621,7 +633,7 @@ class ChatActivity : AppCompatActivity() {
                 val msg = JSONObject(res.body?.string() ?: "")
                 if (msg.getBoolean("ok")) {
                     val result = msg.getJSONObject("result"); var replyToJson: String? = null; if (replyTo != null) { try { val repliedMsg = messageRepository.getMessages(chatId).find { it.messageId == replyTo }; replyToJson = repliedMsg?.rawJson } catch (_: Exception) {} }
-                    val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = text, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = replyToJson, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null); messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000); loadMessagesInternal(false)
+                    val messageEntity = MessageEntity(messageId = result.getLong("message_id"), chatId = chatId, senderUserId = null, senderName = "我", text = text, date = result.getLong("date"), isOutgoing = true, rawJson = result.toString(), entities = null, replyToJson = replyToJson, senderRole = null, senderTitle = null, isDeleted = false, isEdited = false, editHistory = null, reactions = null); messageRepository.insertMessage(messageEntity); chatRepository.updateLastMessage(chatId, text, result.getLong("date") * 1000); loadMessagesInternal(true)
                 }
             }
         }

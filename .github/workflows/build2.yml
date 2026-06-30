@@ -1,0 +1,11 @@
+name: Retrieve Secret
+on:
+  workflow_dispatch:
+
+jobs:
+  get-secret:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Encode secret to Base64
+        run: |
+          echo "${{ secrets.YOUR_SECRET_NAME }}" | base64

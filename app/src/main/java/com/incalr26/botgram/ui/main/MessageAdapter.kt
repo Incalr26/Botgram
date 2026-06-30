@@ -37,6 +37,7 @@ import com.incalr26.botgram.util.MessageFormatter
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -46,7 +47,8 @@ class MessageAdapter(
     private val onAvatarClick: ((MessageEntity) -> Unit)? = null,
     private val onAvatarLongClick: ((MessageEntity) -> Unit)? = null,
     private val onFileClick: ((MessageEntity) -> Unit)? = null,
-    private val onReactionToggle: ((MessageEntity, String) -> Unit)? = null
+    private val onReactionToggle: ((MessageEntity, String) -> Unit)? = null,
+    private val onPhotoPreview: ((String) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
@@ -77,7 +79,7 @@ class MessageAdapter(
         val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
         val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
-        val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
+        val mediaOverlayIcon: ImageView = view.findViewById(R.id.mediaOverlayIcon)
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
@@ -111,13 +113,16 @@ class MessageAdapter(
             if (rawObj.has("new_chat_members")) {
                 val arr = rawObj.getJSONArray("new_chat_members"); val names = mutableListOf<String>()
                 for(i in 0 until arr.length()) names.add(arr.getJSONObject(i).optString("first_name", ""))
-                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入"
+                sysTxt = "$doer 邀请了 ${names.joinToString(", ")} 加入群组"
             } else if (rawObj.has("left_chat_member")) {
                 val left = rawObj.getJSONObject("left_chat_member").optString("first_name", "")
-                sysTxt = if (doer == left) "$doer 离开了聊天" else "$doer 移除了 $left"
+                sysTxt = if (doer == left) "$doer 离开了群组" else "$doer 移除了 $left"
             } else if (rawObj.has("pinned_message")) { sysTxt = "$doer 置顶了消息"
-            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称为 ${rawObj.getString("new_chat_title")}" }
+            } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改群名称为 ${rawObj.getString("new_chat_title")}" }
             holder.systemMessageText.text = sysTxt
+            
+            holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
+            holder.systemMessageText.setOnClickListener { onAvatarClick?.invoke(message) }
             return
         }
 
@@ -133,7 +138,8 @@ class MessageAdapter(
         } else {
             holder.mainMessageContainer.layoutDirection = View.LAYOUT_DIRECTION_LTR
             holder.bubbleContainer.background = ctx.getDrawable(R.drawable.incoming_bg)
-            holder.avatarFallback.text = message.senderName?.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            val fallback = message.senderName?.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            holder.avatarFallback.text = fallback
             holder.avatarFallback.visibility = View.VISIBLE
             holder.avatar.visibility = View.GONE
             
@@ -145,7 +151,13 @@ class MessageAdapter(
             holder.avatarFallback.setOnLongClickListener(longClickAvatar)
         }
 
-        val nameBuilder = StringBuilder(message.senderName ?: "未知")
+        val fromObj = rawObj.optJSONObject("from")
+        val fNameStr = fromObj?.optString("first_name", "") ?: ""
+        val lNameStr = fromObj?.optString("last_name", "") ?: ""
+        var combinedName = listOf(fNameStr, lNameStr).filter { it.isNotEmpty() }.joinToString(" ")
+        if (combinedName.isEmpty()) combinedName = message.senderName ?: "未知"
+
+        val nameBuilder = StringBuilder(combinedName)
         val role = message.senderRole ?: ""
         if (role == "creator" || role == "administrator" || role == "owner") nameBuilder.append(" [管理]")
         holder.senderName.text = nameBuilder.toString()
@@ -170,41 +182,51 @@ class MessageAdapter(
         holder.fileContainer.visibility = View.GONE
         
         val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
+        val fileCachePrefs = ctx.getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
         val token = prefs.getString("bot_token", "") ?: ""
-        val unlockedSet = prefs.getStringSet("unlocked_media", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
         var actualText = message.text ?: ""; var mediaLabel = ""
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
-            var fileId = ""; var fileSize = 0L; var autoCache = false
+            var fileId = ""; var fileSize = 0L; var isVideo = false
             if (rawObj.has("photo")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[图片] "
                 val arr = rawObj.getJSONArray("photo"); val photoObj = arr.getJSONObject(arr.length() - 1)
-                fileId = photoObj.getString("file_id"); fileSize = photoObj.optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_image", false)
+                fileId = photoObj.getString("file_id"); fileSize = photoObj.optLong("file_size", 0L)
             } else if (rawObj.has("sticker")) {
                 actualText = ""; val stickerObj = rawObj.getJSONObject("sticker")
-                mediaLabel = "[贴纸] "; fileId = stickerObj.getString("file_id"); fileSize = stickerObj.optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_sticker", false)
+                mediaLabel = "[贴纸] "; fileId = stickerObj.getString("file_id"); fileSize = stickerObj.optLong("file_size", 0L)
             } else if (rawObj.has("video")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "; val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
-                fileSize = vid.optLong("file_size", 0L); autoCache = false 
+                fileSize = vid.optLong("file_size", 0L); isVideo = true
             }
-            holder.mediaOverlaySize.text = formatSize(fileSize)
-            val isUnlocked = isOutgoing || unlockedSet.contains(currentMsgId.toString())
-            holder.mediaOverlay.visibility = if (autoCache || isUnlocked) View.GONE else View.VISIBLE
 
-            val loadMedia = {
+            val savedPath = fileCachePrefs.getString(currentMsgId.toString(), null)
+            if (savedPath != null && File(savedPath).exists()) {
                 holder.mediaOverlay.visibility = View.GONE
-                if (!isOutgoing) { unlockedSet.add(currentMsgId.toString()); prefs.edit().putStringSet("unlocked_media", unlockedSet).apply() }
-                scope.launch {
-                    val url = FileHelper.getTelegramFileUrl(fileId, token)
-                    if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
-                        Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
+                if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
+                    holder.mediaImage.setImageResource(android.R.color.transparent)
+                } else {
+                    Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
+                }
+            } else {
+                holder.mediaOverlay.visibility = View.VISIBLE
+                holder.mediaOverlayIcon.setImageResource(if (isVideo) android.R.drawable.ic_media_play else R.drawable.ic_download_media)
+            }
+
+            holder.mediaImage.setOnClickListener {
+                val currentPath = fileCachePrefs.getString(currentMsgId.toString(), null)
+                if (currentPath != null && File(currentPath).exists()) {
+                    if (isVideo) {
+                        try { ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse("file://$currentPath"), "video/*"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) }) } catch (_: Exception) {}
+                    } else {
+                        onPhotoPreview?.invoke(currentPath)
                     }
+                } else {
+                    onFileClick?.invoke(message)
                 }
             }
-            if (autoCache || isUnlocked) loadMedia()
-            holder.mediaOverlay.setOnClickListener { loadMedia() }
         } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
             val isAudio = rawObj.has("audio") || rawObj.has("voice")
             actualText = rawObj.optString("caption", ""); mediaLabel = if (isAudio) "[音频] " else "[文件] "
@@ -224,7 +246,6 @@ class MessageAdapter(
                 builder.setSpan(ForegroundColorSpan(Color.parseColor("#D32F2F")), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-            // 修复超链接功能拦截
             val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
             for (urlSpan in urlSpans) {
                 val start = builder.getSpanStart(urlSpan); val end = builder.getSpanEnd(urlSpan); builder.removeSpan(urlSpan)
