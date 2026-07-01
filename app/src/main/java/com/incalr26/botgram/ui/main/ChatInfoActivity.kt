@@ -6,13 +6,13 @@ import android.util.TypedValue
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.MotionEvent
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import coil.load
@@ -20,6 +20,7 @@ import coil.transform.CircleCropTransformation
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.incalr26.botgram.R
 import com.incalr26.botgram.data.remote.ApiClient
 import com.incalr26.botgram.util.AvatarHelper
@@ -57,53 +58,71 @@ class ChatInfoActivity : AppCompatActivity() {
         val miniAvatar = findViewById<ImageView>(R.id.miniToolbarAvatar)
         val chatInfoAvatar = findViewById<ImageView>(R.id.chatInfoAvatar)
         
-        // 确保 CollapsingToolbarLayout 在折叠状态下的颜色与详情页底色完全一致 (Material You)
-        val surfaceColor = getColorAttr(com.google.android.material.R.attr.colorSurface)
-        collapsingToolbar.setContentScrimColor(surfaceColor)
+        // 确保顶栏永远在最上层，不被下方卡片反向覆盖一半
+        appBarLayout.bringToFront()
+        toolbar.bringToFront()
+
+        // 强行使用与聊天页面一致的主题色 (Material You colorPrimary)
+        val primaryColor = getColorAttr(com.google.android.material.R.attr.colorPrimary)
+        collapsingToolbar.setContentScrimColor(primaryColor)
         collapsingToolbar.setStatusBarScrimColor(Color.TRANSPARENT)
 
         miniAvatar.setOnClickListener { appBarLayout.setExpanded(true, true) }
-        
-        chatInfoAvatar.setOnClickListener {
-            if (!currentAvatarUrl.isNullOrEmpty()) {
-                val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-                val iv = ImageView(this).apply {
-                    layoutParams = ViewGroup.LayoutParams(-1, -1)
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                    load(currentAvatarUrl)
-                    setOnClickListener { dialog.dismiss() }
-                }
-                dialog.setContentView(iv); dialog.show()
-            }
-        }
+        chatInfoAvatar.setOnClickListener { showAvatarPreview() }
 
-        // 核心优化 1：处理顶栏折叠防覆盖问题 ＆ 阻尼下拉放大预览
+        var initialY = 0f
+        var isTrackingSwipe = false
+
         appBarLayout.addOnOffsetChangedListener { appBar, verticalOffset ->
             val totalScrollRange = appBar.totalScrollRange
             val absOffset = Math.abs(verticalOffset)
 
-            // 精准控制 miniAvatar 显示时机，防止顶栏被撑开或覆盖一半
+            // 动态控制顶栏覆盖层级与微调，彻底杜绝遮挡
             if (absOffset >= totalScrollRange - toolbar.height) {
                 miniAvatar.visibility = View.VISIBLE
+                appBar.elevation = 12f
+                toolbar.translationZ = 12f
             } else {
                 miniAvatar.visibility = View.GONE
+                appBar.elevation = 0f
+                toolbar.translationZ = 0f
             }
 
-            // 当完全展开时 (verticalOffset == 0)，支持继续下拉放大头像预览
+            // 核心优化：完全拉开时，继续下拉直接进入预览状态
             if (verticalOffset == 0) {
                 appBar.setOnTouchListener { _, event ->
-                    if (event.action == android.view.MotionEvent.ACTION_MOVE) {
-                        // 简单的下拉阻尼效果模拟
-                        val pointerCount = event.pointerCount
-                        if (pointerCount > 0) {
-                            chatInfoAvatar.scaleX = 1.1f
-                            chatInfoAvatar.scaleY = 1.1f
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialY = event.rawY
+                            isTrackingSwipe = true
                         }
-                    } else if (event.action == android.view.MotionEvent.ACTION_UP || event.action == android.view.MotionEvent.ACTION_CANCEL) {
-                        chatInfoAvatar.animate().scaleX(1.0f).scaleY(1.0f).setDuration(200).start()
+                        MotionEvent.ACTION_MOVE -> {
+                            if (isTrackingSwipe) {
+                                val deltaY = event.rawY - initialY
+                                if (deltaY > 0) {
+                                    chatInfoAvatar.scaleX = 1.0f + (deltaY / 800f)
+                                    chatInfoAvatar.scaleY = 1.0f + (deltaY / 800f)
+                                    chatInfoAvatar.translationY = deltaY * 0.4f
+                                    
+                                    // 下拉超过 300 像素直接唤醒全屏预览
+                                    if (deltaY > 300f) {
+                                        isTrackingSwipe = false
+                                        chatInfoAvatar.animate().scaleX(1.0f).scaleY(1.0f).translationY(0f).setDuration(150).start()
+                                        showAvatarPreview()
+                                    }
+                                    return@setOnTouchListener true
+                                }
+                            }
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            isTrackingSwipe = false
+                            chatInfoAvatar.animate().scaleX(1.0f).scaleY(1.0f).translationY(0f).setDuration(200).start()
+                        }
                     }
                     false
                 }
+            } else {
+                appBar.setOnTouchListener(null)
             }
         }
 
@@ -133,6 +152,19 @@ class ChatInfoActivity : AppCompatActivity() {
         }
     }
 
+    private fun showAvatarPreview() {
+        if (!currentAvatarUrl.isNullOrEmpty()) {
+            val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+            val iv = ImageView(this).apply {
+                layoutParams = ViewGroup.LayoutParams(-1, -1)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                load(currentAvatarUrl)
+                setOnClickListener { dialog.dismiss() }
+            }
+            dialog.setContentView(iv); dialog.show()
+        }
+    }
+
     private suspend fun checkBotAdminStatus() {
         if (chatId > 0) return
         withContext(Dispatchers.IO) {
@@ -159,7 +191,6 @@ class ChatInfoActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.infoContentContainer)
         container.removeAllViews()
         
-        // 核心优化 3：严格恢复旧版美观的详情页卡片样式 (Material You 规范)
         fun addCard(titleStr: String, contentBlocks: List<Pair<String, String>>) {
             if (contentBlocks.isEmpty()) return
             val card = MaterialCardView(this).apply {
@@ -195,7 +226,8 @@ class ChatInfoActivity : AppCompatActivity() {
                     txtLayout.addView(TextView(this).apply { text = cnName; textSize = 16f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)) })
                     txtLayout.addView(TextView(this).apply { text = key; textSize = 11f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)) })
                     
-                    val sw = SwitchCompat(this).apply { 
+                    // 彻底修复：采用纯正的 Material You 风格开关 MaterialSwitch
+                    val sw = MaterialSwitch(this@ChatInfoActivity).apply { 
                         isChecked = permObj.getBoolean(key); isEnabled = isBotAdmin
                         setOnCheckedChangeListener { _, checked ->
                             lifecycleScope.launch(Dispatchers.IO) {
@@ -215,7 +247,6 @@ class ChatInfoActivity : AppCompatActivity() {
             card.addView(layout); container.addView(card)
         }
 
-        // 核心优化 2：重构管理员列表显示卡片（加大名字，并存展示 Username 与 ID，支持点击跳转，修正翻译）
         fun addAdminListCard() {
             if (chatId > 0) return 
             lifecycleScope.launch(Dispatchers.IO) {
@@ -240,58 +271,35 @@ class ChatInfoActivity : AppCompatActivity() {
                                     val itemObj = arr.getJSONObject(i)
                                     val user = itemObj.getJSONObject(itemObj.optString("type", "user").takeIf { it.isNotEmpty() && itemObj.has(it) } ?: "user")
                                     val userId = user.getLong("id")
-                                    val firstName = user.optString("first_name", "")
-                                    val lastName = user.optString("last_name", "")
-                                    val uName = user.optString("username", "")
-                                    val displayName = (firstName + " " + lastName).trim().takeIf { it.isNotEmpty() } ?: "User $userId"
+                                    val displayName = (user.optString("first_name", "") + " " + user.optString("last_name", "")).trim().takeIf { it.isNotEmpty() } ?: "User $userId"
                                     
                                     val rawStatus = itemObj.optString("status", "")
-                                    // 精准符合官方翻译：“creator” 修改为 “所有者”
-                                    val roleName = if (rawStatus == "creator") "所有者" else "管理员"
+                                    val baseRole = if (rawStatus == "creator") "所有者" else "管理员"
+                                    
+                                    // 完美修正：提取并追加显示对应的自定义头衔/标签 (custom_title)
+                                    val customTitle = itemObj.optString("custom_title", "")
+                                    val roleName = if (customTitle.isNotEmpty()) "$baseRole ($customTitle)" else baseRole
 
-                                    // 每个管理员构建为精美双行 Material You Item
                                     val itemLayout = LinearLayout(this@ChatInfoActivity).apply {
-                                        orientation = LinearLayout.VERTICAL
-                                        setPadding(0, 16, 0, 16)
-                                        isClickable = true
+                                        orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 16); isClickable = true
                                         setOnClickListener {
-                                            // 点击直接调整到该对应管理员的详情页
-                                            val intent = android.content.Intent(this@ChatInfoActivity, ChatInfoActivity::class.java).apply {
-                                                putExtra("chatId", userId)
-                                            }
+                                            val intent = android.content.Intent(this@ChatInfoActivity, ChatInfoActivity::class.java).apply { putExtra("chatId", userId) }
                                             startActivity(intent)
                                         }
                                     }
 
                                     val firstLine = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.HORIZONTAL }
-                                    val tvName = TextView(this@ChatInfoActivity).apply { 
-                                        text = displayName; textSize = 16f; setTypeface(null, android.graphics.Typeface.BOLD)
-                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface))
-                                        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-                                    }
-                                    val tvRole = TextView(this@ChatInfoActivity).apply { 
-                                        text = roleName; textSize = 12f
-                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary))
-                                    }
+                                    val tvName = TextView(this@ChatInfoActivity).apply { text = displayName; textSize = 16f; setTypeface(null, android.graphics.Typeface.BOLD); setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) }
+                                    val tvRole = TextView(this@ChatInfoActivity).apply { text = roleName; textSize = 12f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)) }
                                     firstLine.addView(tvName); firstLine.addView(tvRole)
 
-                                    val secondLineText = StringBuilder().apply {
-                                        append("ID: $userId")
-                                        if (uName.isNotEmpty()) append("  |  @$uName")
-                                    }.toString()
+                                    val uName = user.optString("username", "")
+                                    val secondLineText = "ID: $userId" + if (uName.isNotEmpty()) "  |  @$uName" else ""
+                                    val tvDetails = TextView(this@ChatInfoActivity).apply { text = secondLineText; textSize = 12f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)); setPadding(0, 4, 0, 0) }
 
-                                    val tvDetails = TextView(this@ChatInfoActivity).apply {
-                                        text = secondLineText; textSize = 12f
-                                        setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant))
-                                        setPadding(0, 4, 0, 0)
-                                    }
-
-                                    itemLayout.addView(firstLine)
-                                    itemLayout.addView(tvDetails)
-                                    layout.addView(itemLayout)
+                                    itemLayout.addView(firstLine); itemLayout.addView(tvDetails); layout.addView(itemLayout)
                                 }
-                                card.addView(layout)
-                                container.addView(card)
+                                card.addView(layout); container.addView(card)
                             }
                         }
                     }
@@ -331,7 +339,12 @@ class ChatInfoActivity : AppCompatActivity() {
             if (chat.has("has_protected_content") && chat.getBoolean("has_protected_content")) extraInfo.add("禁止转发与保存" to "已开启")
             if (chat.has("has_hidden_members") && chat.getBoolean("has_hidden_members")) extraInfo.add("隐藏群成员" to "已开启")
             if (chat.has("join_to_send_messages") && chat.getBoolean("join_to_send_messages")) extraInfo.add("发言限制" to "必须加入群组才能发言")
-            if (chat.has("join_by_request") && chat.getBoolean("join_by_request")) extraInfo.add("进群方式" to "需要管理员审批")
+            
+            // 精确修正：进群审批属于邀请链接或群组的特定配置状态，不再将其和所有权混为一谈
+            if (chat.has("join_by_request")) {
+                extraInfo.add("加群邀请链接审批" to if (chat.getBoolean("join_by_request")) "强制开启（需管理员手动通过）" else "关闭（通过合法链接直接加入）")
+            }
+            
             if (chat.has("available_reactions")) {
                 val arr = chat.getJSONArray("available_reactions"); val reactions = mutableListOf<String>()
                 for (i in 0 until arr.length()) { val r = arr.getJSONObject(i); if (r.optString("type") == "emoji") reactions.add(r.getString("emoji")) }
