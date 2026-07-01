@@ -14,12 +14,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="8dp"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
-        android:textSize="13sp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:textSize="12sp"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone" />
 
@@ -103,7 +103,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
                         android:layout_marginStart="6dp"
-                        android:minWidth="100dp"
+                        android:minWidth="120dp"
                         android:maxWidth="250dp">
                         <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal">
                             <TextView android:id="@+id/replyName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="?attr/colorPrimary" android:textStyle="bold" android:singleLine="true"/>
@@ -118,41 +118,66 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="6dp"
-                    android:visibility="gone"
-                    android:background="?attr/colorSurfaceVariant">
-                    
-                    <ImageView
-                        android:id="@+id/mediaImage"
+                    android:visibility="gone">
+                    <com.google.android.material.card.MaterialCardView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:adjustViewBounds="true"
-                        android:minWidth="160dp"
-                        android:minHeight="160dp"
-                        android:maxWidth="260dp"
-                        android:maxHeight="320dp" />
-
-                    <FrameLayout
-                        android:id="@+id/mediaOverlay"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:visibility="gone">
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="0dp"
+                        app:cardBackgroundColor="#212121">
                         
-                        <com.google.android.material.card.MaterialCardView
-                            android:layout_width="56dp"
-                            android:layout_height="56dp"
-                            android:layout_gravity="center"
-                            app:cardCornerRadius="28dp"
-                            app:cardElevation="0dp"
-                            app:cardBackgroundColor="#AA000000">
+                        <FrameLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="160dp"
+                            android:minHeight="160dp">
+                            
                             <ImageView
-                                android:id="@+id/mediaOverlayIcon"
-                                android:layout_width="32dp"
-                                android:layout_height="32dp"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_download_media"
-                                app:tint="@android:color/white" />
-                        </com.google.android.material.card.MaterialCardView>
-                    </FrameLayout>
+                                android:id="@+id/mediaImage"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:adjustViewBounds="true"
+                                android:maxWidth="260dp"
+                                android:maxHeight="320dp" />
+                            
+                            <FrameLayout
+                                android:id="@+id/mediaOverlay"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:background="#66000000"
+                                android:visibility="gone">
+                                <LinearLayout
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_gravity="center"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+                                    <com.google.android.material.card.MaterialCardView
+                                        android:layout_width="48dp"
+                                        android:layout_height="48dp"
+                                        app:cardCornerRadius="24dp"
+                                        app:cardElevation="0dp"
+                                        app:cardBackgroundColor="#AA000000">
+                                        <ImageView
+                                            android:id="@+id/mediaOverlayIcon"
+                                            android:layout_width="28dp"
+                                            android:layout_height="28dp"
+                                            android:layout_gravity="center"
+                                            android:src="@drawable/ic_save_media"
+                                            app:tint="@android:color/white" />
+                                    </com.google.android.material.card.MaterialCardView>
+                                    <TextView
+                                        android:id="@+id/mediaOverlaySize"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:textColor="@android:color/white"
+                                        android:textSize="12sp"
+                                        android:textStyle="bold"
+                                        android:layout_marginTop="8dp" />
+                                </LinearLayout>
+                            </FrameLayout>
+                        </FrameLayout>
+                    </com.google.android.material.card.MaterialCardView>
                 </FrameLayout>
 
                 <com.google.android.material.card.MaterialCardView
@@ -174,7 +199,7 @@
                             android:id="@+id/fileIcon"
                             android:layout_width="32dp"
                             android:layout_height="32dp"
-                            android:src="@drawable/ic_file_document"
+                            android:src="@drawable/ic_file"
                             app:tint="?attr/colorPrimary" />
                         <LinearLayout
                             android:layout_width="0dp"
@@ -208,9 +233,7 @@
                     android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp"
                     android:lineSpacingExtra="2dp"
-                    android:textIsSelectable="true"
-                    android:autoLink="web"
-                    android:linksClickable="true" />
+                    android:textIsSelectable="true" />
             </LinearLayout>
 
             <HorizontalScrollView

@@ -51,8 +51,7 @@ class MessageAdapter(
     private val onPhotoPreview: ((String) -> Unit)? = null
 ) : ListAdapter<MessageEntity, MessageAdapter.ViewHolder>(DiffCallback()) {
 
-    private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    private val minFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private fun formatSize(size: Long): String {
@@ -79,6 +78,7 @@ class MessageAdapter(
         val mediaContainer: FrameLayout = view.findViewById(R.id.mediaContainer)
         val mediaImage: ImageView = view.findViewById(R.id.mediaImage)
         val mediaOverlay: FrameLayout = view.findViewById(R.id.mediaOverlay)
+        val mediaOverlaySize: TextView = view.findViewById(R.id.mediaOverlaySize)
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
@@ -187,19 +187,18 @@ class MessageAdapter(
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
-            var fileId = ""; var isVideo = false; var autoCache = false
+            var fileId = ""; var fileSize = 0L; var autoCache = false; var isVideo = false
             if (rawObj.has("photo")) {
                 actualText = rawObj.optString("caption", ""); mediaLabel = "[图片] "
                 val arr = rawObj.getJSONArray("photo"); val photoObj = arr.getJSONObject(arr.length() - 1)
-                fileId = photoObj.getString("file_id"); autoCache = prefs.getBoolean("auto_image", false)
+                fileId = photoObj.getString("file_id"); fileSize = photoObj.optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_image", false)
             } else if (rawObj.has("sticker")) {
-                actualText = ""; mediaLabel = "[贴纸] "
-                fileId = rawObj.getJSONObject("sticker").getString("file_id"); autoCache = prefs.getBoolean("auto_sticker", false)
+                actualText = ""; val stickerObj = rawObj.getJSONObject("sticker")
+                mediaLabel = "[贴纸] "; fileId = stickerObj.getString("file_id"); fileSize = stickerObj.optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_sticker", false)
             } else if (rawObj.has("video")) {
-                actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "
-                val vid = rawObj.getJSONObject("video")
+                actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "; val vid = rawObj.getJSONObject("video")
                 fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
-                isVideo = true; autoCache = false 
+                fileSize = vid.optLong("file_size", 0L); autoCache = false; isVideo = true 
             }
 
             val savedPath = fileCachePrefs.getString(currentMsgId.toString(), null)
@@ -208,26 +207,24 @@ class MessageAdapter(
                 scope.launch {
                     val url = FileHelper.getTelegramFileUrl(fileId, token)
                     if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
-                        if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
-                            holder.mediaImage.setImageResource(android.R.color.transparent)
-                        } else {
-                            Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
-                        }
+                        Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
                     }
                 }
             }
 
             if (savedPath != null && File(savedPath).exists()) {
                 holder.mediaOverlay.visibility = View.GONE
-                if (isVideo && !rawObj.getJSONObject("video").has("thumbnail")) {
-                    holder.mediaImage.setImageResource(android.R.color.transparent)
-                } else Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
+                Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
             } else {
+                holder.mediaOverlaySize.text = formatSize(fileSize)
                 holder.mediaOverlay.visibility = View.VISIBLE
-                if (autoCache) loadMediaFn()
+                if (autoCache) {
+                    holder.mediaOverlay.visibility = View.GONE
+                    onFileClick?.invoke(message) // 触发后台下载逻辑以便真正落盘缓存
+                }
             }
 
-            // 完全拦截点击，不再触犯外部菜单
+            // 严格分离点击事件：点击占位层下载，点击已加载大图预览
             holder.mediaOverlay.setOnClickListener { onFileClick?.invoke(message) }
             holder.mediaImage.setOnClickListener {
                 val currentPath = fileCachePrefs.getString(currentMsgId.toString(), null)
@@ -235,7 +232,9 @@ class MessageAdapter(
                     if (isVideo) {
                         try { ctx.startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse("file://$currentPath"), "video/*"); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION) }) } catch (_: Exception) {}
                     } else onPhotoPreview?.invoke(currentPath)
-                } else onFileClick?.invoke(message)
+                } else {
+                    onFileClick?.invoke(message)
+                }
             }
         } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
             val isAudio = rawObj.has("audio") || rawObj.has("voice")
@@ -255,14 +254,6 @@ class MessageAdapter(
                 val start = builder.length; builder.append(" [已撤回]")
                 builder.setSpan(ForegroundColorSpan(Color.parseColor("#D32F2F")), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
-            for (urlSpan in urlSpans) {
-                val start = builder.getSpanStart(urlSpan); val end = builder.getSpanEnd(urlSpan); builder.removeSpan(urlSpan)
-                builder.setSpan(object : ClickableSpan() {
-                    override fun onClick(w: View) { MaterialAlertDialogBuilder(ctx).setTitle("打开链接").setMessage(urlSpan.url).setPositiveButton("打开") { _, _ -> ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) }.setNegativeButton("取消", null).show() }
-                    override fun updateDrawState(ds: TextPaint) { super.updateDrawState(ds); ds.isUnderlineText = true }
-                }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             holder.messageText.text = builder
             holder.messageText.movementMethod = LinkMovementMethod.getInstance()
@@ -300,9 +291,8 @@ class MessageAdapter(
             } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
         } else holder.reactionsContainer.visibility = View.GONE
 
-        val dateStr = SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(message.date * 1000))
-        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑 ${minFormat.format(Date(ed * 1000))}]" else " [已编辑]" } else ""
-        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  $dateStr ${timeFormat.format(Date(message.date * 1000))}$editStr"
+        val editStr = if (message.isEdited) { val ed = rawObj.optLong("edit_date", 0L); if (ed > 0) " [已编辑]" else " [已编辑]" } else ""
+        holder.messageInfo.text = "$mediaLabel ID:${message.messageId}  ${timeFormat.format(Date(message.date * 1000))}$editStr"
 
         holder.loadJob?.cancel()
         if (!isOutgoing && prefs.getBoolean("use_real_avatar", true) && message.senderUserId != null) {
