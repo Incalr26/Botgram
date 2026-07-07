@@ -66,14 +66,32 @@
                 android:padding="10dp"
                 android:clipToOutline="true">
 
-                <TextView
-                    android:id="@+id/senderName"
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
-                    android:textColor="?attr/colorPrimary"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="4dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
+                    <TextView
+                        android:id="@+id/senderName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="13sp"
+                        android:textColor="?attr/colorPrimary"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/adminTag"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:textColor="?attr/colorOnSecondaryContainer"
+                        android:background="@drawable/bg_admin_tag"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/forwardInfo"
@@ -124,7 +142,7 @@
                         android:layout_height="wrap_content"
                         app:cardCornerRadius="8dp"
                         app:cardElevation="0dp"
-                        app:cardBackgroundColor="#212121">
+                        app:cardBackgroundColor="@android:color/transparent">
                         
                         <FrameLayout
                             android:layout_width="wrap_content"
@@ -163,7 +181,7 @@
                                             android:layout_width="28dp"
                                             android:layout_height="28dp"
                                             android:layout_gravity="center"
-                                            android:src="@drawable/ic_save_media"
+                                            android:src="@drawable/ic_file"
                                             app:tint="@android:color/white" />
                                     </com.google.android.material.card.MaterialCardView>
                                     <TextView
