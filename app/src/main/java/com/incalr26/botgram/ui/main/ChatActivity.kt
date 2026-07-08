@@ -136,7 +136,7 @@ class ChatActivity : AppCompatActivity() {
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                     imm.showSoftInput(messageInput, 0)
                 },
-                onFileClick = { message, _ -> handleFileClick(message) },
+                onFileClick = { message -> handleFileClick(message) },
                 onReactionToggle = { message, emoji -> toggleReaction(message, emoji) },
                 onPhotoPreview = { path -> showImagePreviewDialog(path) }
             )
