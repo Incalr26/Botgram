@@ -1,5 +1,7 @@
 package com.incalr26.botgram.ui.main
 
+import android.annotation.SuppressLint
+import android.app.Dialog
 import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
@@ -8,6 +10,7 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -17,6 +20,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import coil.load
 import coil.transform.CircleCropTransformation
+import com.bumptech.glide.Glide
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.google.android.material.card.MaterialCardView
@@ -30,6 +34,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import kotlin.math.abs
 
 class ChatInfoActivity : AppCompatActivity() {
 
@@ -38,6 +44,7 @@ class ChatInfoActivity : AppCompatActivity() {
     private var botToken: String = ""
     private var currentAvatarUrl: String? = null
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -71,17 +78,15 @@ class ChatInfoActivity : AppCompatActivity() {
                 MotionEvent.ACTION_DOWN -> { startY = event.y }
                 MotionEvent.ACTION_MOVE -> {
                     if (appBarLayout.bottom >= appBarLayout.height && (event.y - startY) > 250f) {
-                        if (!currentAvatarUrl.isNullOrEmpty()) {
-                            val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-                            val iv = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); scaleType = ImageView.ScaleType.FIT_CENTER; load(currentAvatarUrl); setOnClickListener { dialog.dismiss() } }
-                            dialog.setContentView(iv); dialog.show()
-                        }
+                        showAvatarPreview()
                         startY = event.y 
                     }
                 }
             }
             false
         }
+        
+        chatInfoAvatar.setOnClickListener { showAvatarPreview() }
 
         appBarLayout.addOnOffsetChangedListener { appBar, verticalOffset ->
             if (Math.abs(verticalOffset) >= appBar.totalScrollRange - 50) miniContent.visibility = View.VISIBLE 
@@ -95,13 +100,31 @@ class ChatInfoActivity : AppCompatActivity() {
             }
 
             if (resultJson != null && resultJson.getBoolean("ok")) renderUI(resultJson.getJSONObject("result"))
+            else {
+                val dbHelper = com.incalr26.botgram.BotApp.instance.databaseHelper
+                val localChat = com.incalr26.botgram.data.repository.ChatRepository(dbHelper).getChatById(chatId)
+                if (localChat != null) {
+                    val fallback = JSONObject().apply { put("id", localChat.chatId); put("type", localChat.type); put("title", localChat.title ?: ""); put("first_name", localChat.firstName ?: ""); put("last_name", localChat.lastName ?: ""); put("username", localChat.username ?: "") }
+                    renderUI(fallback)
+                }
+            }
             
             val avatarUrl = withContext(Dispatchers.IO) { AvatarHelper.getUserAvatar(chatId) }
             if (!avatarUrl.isNullOrEmpty()) {
                 currentAvatarUrl = avatarUrl
                 chatInfoAvatar.load(avatarUrl) { crossfade(true) }
-                findViewById<ImageView>(R.id.miniToolbarAvatar).load(avatarUrl) { crossfade(true) }
+                findViewById<ImageView>(R.id.miniToolbarAvatar).load(avatarUrl) { crossfade(true); transformations(CircleCropTransformation()) }
             }
+        }
+    }
+
+    private fun showAvatarPreview() {
+        if (!currentAvatarUrl.isNullOrEmpty()) {
+            val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            val iv = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); scaleType = ImageView.ScaleType.FIT_CENTER; setBackgroundColor(Color.BLACK); setOnTouchListener(ChatActivity.MatrixTouchListener()) }
+            Glide.with(this).load(currentAvatarUrl).into(iv)
+            dialog.setContentView(iv); dialog.show()
         }
     }
 
@@ -141,13 +164,59 @@ class ChatInfoActivity : AppCompatActivity() {
             card.addView(layout); container.addView(card)
         }
 
+        fun addAdminListCard() {
+            if (chatId > 0) return 
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val req = Request.Builder().url("https://api.telegram.org/bot$botToken/getChatAdministrators?chat_id=$chatId").build()
+                    val res = ApiClient.getClient().newCall(req).execute()
+                    if (res.isSuccessful) {
+                        val json = JSONObject(res.body?.string() ?: "")
+                        if (json.getBoolean("ok")) {
+                            val arr = json.getJSONArray("result")
+                            withContext(Dispatchers.Main) {
+                                val card = MaterialCardView(this@ChatInfoActivity).apply { layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 32 }; radius = 24f; cardElevation = 0f; setCardBackgroundColor(getColorAttr(com.google.android.material.R.attr.colorSurfaceVariant)) }
+                                val layout = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+                                layout.addView(TextView(this@ChatInfoActivity).apply { text = "管理员列表"; textSize = 14f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)); setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 24) })
+                                for (i in 0 until arr.length()) {
+                                    val itemObj = arr.getJSONObject(i)
+                                    val user = itemObj.getJSONObject("user")
+                                    val userId = user.getLong("id")
+                                    val displayName = (user.optString("first_name", "") + " " + user.optString("last_name", "")).trim().takeIf { it.isNotEmpty() } ?: "User $userId"
+                                    
+                                    val rawStatus = itemObj.optString("status", "")
+                                    val baseRole = if (rawStatus == "creator") "所有者" else "管理员"
+                                    val customTitle = itemObj.optString("custom_title", "")
+                                    val roleName = if (customTitle.isNotEmpty()) "$baseRole ($customTitle)" else baseRole
+
+                                    val itemLayout = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 16, 0, 16); isClickable = true; setOnClickListener { startActivity(android.content.Intent(this@ChatInfoActivity, ChatInfoActivity::class.java).apply { putExtra("chatId", userId) }) } }
+                                    val firstLine = LinearLayout(this@ChatInfoActivity).apply { orientation = LinearLayout.HORIZONTAL }
+                                    firstLine.addView(TextView(this@ChatInfoActivity).apply { text = displayName; textSize = 16f; setTypeface(null, android.graphics.Typeface.BOLD); setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurface)); layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+                                    firstLine.addView(TextView(this@ChatInfoActivity).apply { text = roleName; textSize = 12f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorPrimary)) })
+                                    
+                                    val uName = user.optString("username", "")
+                                    itemLayout.addView(firstLine)
+                                    itemLayout.addView(TextView(this@ChatInfoActivity).apply { text = "ID: $userId" + if (uName.isNotEmpty()) "  |  @$uName" else ""; textSize = 12f; setTextColor(getColorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant)); setPadding(0, 4, 0, 0) })
+                                    layout.addView(itemLayout)
+                                }
+                                card.addView(layout); container.addView(card)
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
         // 基本信息
         val type = chat.getString("type")
         val username = chat.optString("username")
         val basicInfo = mutableListOf<Pair<String, String>>()
         basicInfo.add("ID" to chat.getLong("id").toString())
         basicInfo.add("类型" to when (type) { "private" -> "私聊"; "group" -> "私密群组"; "supergroup" -> if (username.isNotEmpty()) "公开群组" else "私密群组"; "channel" -> if (username.isNotEmpty()) "公开频道" else "私密频道"; else -> type })
-        if (username.isNotEmpty()) basicInfo.add(if (type == "private") "用户名" else "公开链接" to if (type == "private") "@$username" else "https://t.me/$username")
+        if (username.isNotEmpty()) {
+            if (type == "private") basicInfo.add("用户名" to "@$username")
+            else basicInfo.add("公开链接" to "https://t.me/$username")
+        }
         addCard("基本信息", basicInfo)
 
         // 详细资料（提到权限管理之上）
@@ -207,6 +276,8 @@ class ChatInfoActivity : AppCompatActivity() {
             }
         }
         addCard("系统与设置", extraInfo)
+        
+        addAdminListCard()
     }
     
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }

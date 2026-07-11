@@ -24,12 +24,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.Coil
 import coil.request.ImageRequest
 import coil.transform.CircleCropTransformation
+import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.incalr26.botgram.R
@@ -104,8 +106,8 @@ class MessageAdapter(
         val currentMsgId = message.messageId
         holder.boundMessageId = currentMsgId
         val ctx = holder.itemView.context
+        val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
 
-        // 1. 日期处理
         val currentDate = Date(message.date * 1000)
         val cal = Calendar.getInstance().apply { time = currentDate }
         val currentYear = Calendar.getInstance().get(Calendar.YEAR)
@@ -122,7 +124,6 @@ class MessageAdapter(
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
-        // 渲染表情回应的闭包复用
         val renderReactions = { container: LinearLayout, alignCenter: Boolean ->
             container.removeAllViews()
             if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
@@ -154,7 +155,6 @@ class MessageAdapter(
             } else container.visibility = View.GONE
         }
 
-        // 7. 系统消息也能渲染表情
         if (rawObj.has("new_chat_members") || rawObj.has("left_chat_member") || rawObj.has("pinned_message") || rawObj.has("new_chat_title")) {
             holder.mainMessageContainer.visibility = View.GONE
             holder.systemMessageText.visibility = View.VISIBLE
@@ -173,7 +173,7 @@ class MessageAdapter(
             } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称" }
             holder.systemMessageText.text = sysTxt
             
-            holder.systemMessageText.setOnClickListener { onClick?.invoke(message, holder.systemMessageText) } // 单击出菜单
+            holder.systemMessageText.setOnClickListener { onClick?.invoke(message, holder.systemMessageText) }
             renderReactions(holder.systemReactionsContainer, true)
             return
         }
@@ -210,7 +210,7 @@ class MessageAdapter(
             holder.avatarFallback.setOnLongClickListener(longClickAvatar)
         }
 
-        // 12. 姓名与管理员标签
+        // 精准的管理员标签逻辑
         val fromObj = rawObj.optJSONObject("from")
         val fNameStr = fromObj?.optString("first_name", "") ?: ""
         val lNameStr = fromObj?.optString("last_name", "") ?: ""
@@ -219,9 +219,15 @@ class MessageAdapter(
 
         val nameBuilder = SpannableStringBuilder(combinedName)
         val role = message.senderRole ?: ""
-        if (role == "creator" || role == "administrator" || role == "owner") {
+        var adminBase = ""
+        if (role == "creator" || role == "owner") adminBase = "所有者"
+        else if (role == "administrator") adminBase = "管理员"
+
+        if (adminBase.isNotEmpty()) {
+            val customTitle = rawObj.optString("author_signature", message.senderTitle ?: "")
+            val finalTag = if (customTitle.isNotEmpty()) " [$adminBase $customTitle]" else " [$adminBase]"
             val start = nameBuilder.length
-            nameBuilder.append(" [管理]")
+            nameBuilder.append(finalTag)
             nameBuilder.setSpan(ForegroundColorSpan(Color.parseColor("#4CAF50")), start, nameBuilder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         holder.senderName.text = nameBuilder
@@ -246,6 +252,7 @@ class MessageAdapter(
         holder.fileContainer.visibility = View.GONE
         
         val fileCachePrefs = ctx.getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
+        val token = prefs.getString("bot_token", "") ?: ""
         var actualText = message.text ?: ""; var mediaLabel = ""
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
@@ -265,18 +272,15 @@ class MessageAdapter(
             }
 
             val savedPath = fileCachePrefs.getString(currentMsgId.toString(), null)
-            
-            // 8. 缓存 UI 完善
             if (savedPath != null && File(savedPath).exists()) {
                 holder.mediaOverlayContainer.visibility = View.GONE
-                Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
+                Glide.with(ctx).load(File(savedPath)).into(holder.mediaImage)
             } else {
                 holder.mediaImage.setImageDrawable(null)
                 holder.mediaOverlayText.text = formatSize(fileSize)
                 holder.mediaOverlayContainer.visibility = View.VISIBLE
             }
 
-            // 6. 边缘点击弹菜单，图标点击下载或全屏
             holder.mediaOverlayContainer.setOnClickListener { onFileClick?.invoke(message) }
             holder.mediaImage.setOnClickListener {
                 val currentPath = fileCachePrefs.getString(currentMsgId.toString(), null)
@@ -286,6 +290,7 @@ class MessageAdapter(
                     } else onPhotoPreview?.invoke(currentPath)
                 } else onFileClick?.invoke(message)
             }
+            holder.mediaImage.setOnLongClickListener { onLongClick?.invoke(message, holder.bubbleContainer) ?: false }
         } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
             val isAudio = rawObj.has("audio") || rawObj.has("voice")
             actualText = rawObj.optString("caption", actualText); mediaLabel = if (isAudio) "[音频] " else "[文件] "
@@ -296,7 +301,6 @@ class MessageAdapter(
             holder.fileContainer.setOnClickListener { onFileClick?.invoke(message) }
         }
 
-        // 10. 文本格式，不分发收件全应用
         if (actualText.isEmpty() && !message.isDeleted) holder.messageText.visibility = View.GONE
         else {
             holder.messageText.visibility = View.VISIBLE
@@ -307,19 +311,13 @@ class MessageAdapter(
                 builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             
-            // 3. 安全的超链接弹窗
             val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
             for (urlSpan in urlSpans) {
                 val start = builder.getSpanStart(urlSpan); val end = builder.getSpanEnd(urlSpan); val flags = builder.getSpanFlags(urlSpan)
                 builder.removeSpan(urlSpan)
                 builder.setSpan(object : ClickableSpan() {
                     override fun onClick(w: View) { 
-                        MaterialAlertDialogBuilder(ctx)
-                            .setTitle("安全提示")
-                            .setMessage("即将访问链接：\n\n${urlSpan.url}")
-                            .setPositiveButton("继续访问") { _, _ -> try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) } catch(e:Exception){} }
-                            .setNegativeButton("取消", null)
-                            .show() 
+                        MaterialAlertDialogBuilder(ctx).setTitle("安全提示").setMessage("即将访问链接：\n\n${urlSpan.url}").setPositiveButton("继续访问") { _, _ -> try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) } catch(e:Exception){} }.setNegativeButton("取消", null).show() 
                     }
                     override fun updateDrawState(ds: TextPaint) { 
                         super.updateDrawState(ds)
@@ -349,12 +347,9 @@ class MessageAdapter(
                     return super.onTouchEvent(widget, buffer, event)
                 }
             }
-            
-            // 9. 单击直接呼出菜单
             holder.messageText.setOnClickListener { onClick?.invoke(message, holder.bubbleContainer) }
         }
 
-        // 13. 内联键盘支持
         holder.inlineKeyboardContainer.removeAllViews()
         if (rawObj.has("reply_markup")) {
             val markup = rawObj.getJSONObject("reply_markup")

@@ -6,14 +6,18 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.PointF
 import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
+import android.text.Html
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -29,7 +33,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import coil.load
 import com.bumptech.glide.Glide
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -50,7 +53,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.math.sqrt
 
 class ChatActivity : AppCompatActivity() {
     private lateinit var chatRepository: ChatRepository
@@ -69,6 +76,36 @@ class ChatActivity : AppCompatActivity() {
     private val pickVideosLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "video") }
     private val pickFilesLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "document") }
     private val pickAudioLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris -> handleMediaSelected(uris, "audio") }
+
+    class MatrixTouchListener : View.OnTouchListener {
+        private val matrix = Matrix()
+        private val savedMatrix = Matrix()
+        private var mode = 0
+        private val start = PointF()
+        private val mid = PointF()
+        private var oldDist = 1f
+
+        override fun onTouch(v: View, event: MotionEvent): Boolean {
+            val view = v as ImageView
+            view.scaleType = ImageView.ScaleType.MATRIX
+            when (event.action and MotionEvent.ACTION_MASK) {
+                MotionEvent.ACTION_DOWN -> { savedMatrix.set(matrix); start.set(event.x, event.y); mode = 1 }
+                MotionEvent.ACTION_POINTER_DOWN -> { oldDist = spacing(event); if (oldDist > 10f) { savedMatrix.set(matrix); midPoint(mid, event); mode = 2 } }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> { mode = 0 }
+                MotionEvent.ACTION_MOVE -> {
+                    if (mode == 1) { matrix.set(savedMatrix); matrix.postTranslate(event.x - start.x, event.y - start.y) }
+                    else if (mode == 2) {
+                        val newDist = spacing(event)
+                        if (newDist > 10f) { matrix.set(savedMatrix); val scale = newDist / oldDist; matrix.postScale(scale, scale, mid.x, mid.y) }
+                    }
+                }
+            }
+            view.imageMatrix = matrix
+            return true
+        }
+        private fun spacing(event: MotionEvent): Float { val x = event.getX(0) - event.getX(1); val y = event.getY(0) - event.getY(1); return sqrt((x * x + y * y).toDouble()).toFloat() }
+        private fun midPoint(point: PointF, event: MotionEvent) { val x = event.getX(0) + event.getX(1); val y = event.getY(0) + event.getY(1); point.set(x / 2, y / 2) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,7 +137,6 @@ class ChatActivity : AppCompatActivity() {
             chatRepository = ChatRepository(app.databaseHelper)
             messageRepository = MessageRepository(app.databaseHelper)
             val messageInput = findViewById<EditText>(R.id.messageInput)
-            val fileCachePrefs = getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
 
             adapter = MessageAdapter(
                 onClick = { message, view ->
@@ -140,7 +176,7 @@ class ChatActivity : AppCompatActivity() {
                             val savedFile = FileHelper.saveMediaToStorageAndGetFile(this@ChatActivity, url, subDir, origName)
                             withContext(Dispatchers.Main) {
                                 if (savedFile != null) {
-                                    fileCachePrefs.edit().putString(message.messageId.toString(), savedFile.absolutePath).apply()
+                                    getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE).edit().putString(message.messageId.toString(), savedFile.absolutePath).apply()
                                     val pos = adapter.currentList.indexOfFirst { it.messageId == message.messageId }
                                     if (pos != -1) adapter.notifyItemChanged(pos)
                                 } else Toast.makeText(this@ChatActivity, "缓存失败", Toast.LENGTH_SHORT).show()
@@ -152,7 +188,7 @@ class ChatActivity : AppCompatActivity() {
                 onPhotoPreview = { path ->
                     val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
                     dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-                    val imageView = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setBackgroundColor(Color.BLACK); setOnTouchListener(ChatInfoActivity.MatrixTouchListener()) }
+                    val imageView = ImageView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setBackgroundColor(Color.TRANSPARENT); setOnTouchListener(MatrixTouchListener()) }
                     Glide.with(this).load(path).into(imageView)
                     dialog.setContentView(imageView); dialog.show()
                 }
@@ -214,7 +250,7 @@ class ChatActivity : AppCompatActivity() {
                 messageInput.text.clear(); pendingUploads.clear(); updatePreviewUI(); updateSendButtonState()
             }
 
-            lifecycleScope.launch(Dispatchers.IO + crashHandler) { loadTitleAndType(); loadMessagesInternal(); chatRepository.updateUnreadCount(chatId, 0) }
+            lifecycleScope.launch(Dispatchers.IO + crashHandler) { loadTitleAndType(); loadMessagesInternal(true); chatRepository.updateUnreadCount(chatId, 0) }
             NewMessageNotifier.newMessage.observe(this) { lifecycleScope.launch(Dispatchers.IO) { delay(100); loadMessagesInternal() } }
         } catch (e: Exception) { gotoCrash(e) }
     }
@@ -386,14 +422,14 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun loadMessagesInternal() {
+    private suspend fun loadMessagesInternal(forceScroll: Boolean = false) {
         val messages = messageRepository.getMessages(chatId)
         withContext(Dispatchers.Main) {
             val list = messages.toList()
             val isAtBottom = !recyclerView.canScrollVertically(1)
             adapter.submitList(list) {
                 if (list.isNotEmpty()) {
-                    if (isAtBottom) {
+                    if (isAtBottom || forceScroll) {
                         recyclerView.scrollToPosition(list.size - 1)
                         findViewById<View>(R.id.fabScrollDown).visibility = View.GONE
                     } else {
@@ -413,7 +449,6 @@ class ChatActivity : AppCompatActivity() {
             Triple("复制", R.drawable.ic_copy, 1),
             Triple("复读", R.drawable.ic_plus_one_outline, 2)
         )
-        // 被撤回的消息限制菜单，只能复制和复读
         if (!message.isDeleted) {
             items.add(Triple("转发式复读", R.drawable.ic_repeat, 6))
             items.add(Triple("转发给...", R.drawable.ic_send, 7))
@@ -423,7 +458,7 @@ class ChatActivity : AppCompatActivity() {
             if (message.isOutgoing) { items.add(Triple("编辑", R.drawable.ic_edit, 9)); items.add(Triple("撤回", R.drawable.ic_revoke, 3)) }
             if (!message.editHistory.isNullOrEmpty() && message.editHistory != "[]") items.add(Triple("编辑历史", R.drawable.ic_history, 10))
             val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
-            if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) { items.add(0, Triple("保存", R.drawable.ic_save_media, 8)) }
+            if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video") || rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) { items.add(0, Triple("保存", R.drawable.ic_download, 8)) }
         }
 
         val popupWindow = PopupWindow(container, -2, -2, true).apply { isFocusable = true; setBackgroundDrawable(ContextCompat.getDrawable(this@ChatActivity, android.R.color.transparent)) }
@@ -453,7 +488,6 @@ class ChatActivity : AppCompatActivity() {
             6 -> handleRepeatAction(message, true)
             7 -> showForwardDialog(message)
             8 -> {
-                Toast.makeText(this, "文件已在本地或正在下载中...", Toast.LENGTH_SHORT).show()
                 val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
                 var fileId = ""; var subDir = "Files"; var origName = "file_${message.messageId}"
                 if (rawObj.has("document")) { val doc = rawObj.getJSONObject("document"); fileId = doc.getString("file_id"); origName = doc.optString("file_name", origName) }
@@ -534,7 +568,6 @@ class ChatActivity : AppCompatActivity() {
         } else { if (isForward) forwardMessage(message, chatId) else repeatMessageWithMarkup(message) }
     }
     
-    // 支持内联键盘原样复读
     private fun repeatMessageWithMarkup(message: MessageEntity) {
         val replyMarkup = try { JSONObject(message.rawJson ?: "{}").optJSONObject("reply_markup")?.toString() } catch(e:Exception){null}
         sendTextMessage(message.text ?: "", null, replyMarkup)
