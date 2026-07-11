@@ -4,10 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp"
-    android:paddingTop="4dp"
-    android:paddingBottom="4dp">
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="4dp">
 
     <TextView
         android:id="@+id/dateHeader"
@@ -22,19 +20,32 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/systemMessageText"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="8dp"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
-        android:textSize="12sp"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:visibility="gone" />
+        android:orientation="vertical"
+        android:gravity="center">
+        
+        <TextView
+            android:id="@+id/systemMessageText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:textSize="12sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/systemReactionsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/mainMessageContainer"
@@ -69,7 +80,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:maxWidth="300dp">
+            android:maxWidth="320dp">
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/bubbleContainer"
@@ -77,6 +88,7 @@
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
+                app:strokeWidth="0dp"
                 app:cardBackgroundColor="?attr/colorSurfaceVariant">
 
                 <LinearLayout
@@ -145,6 +157,7 @@
                         android:layout_marginTop="4dp"
                         app:cardCornerRadius="12dp"
                         app:cardElevation="0dp"
+                        app:strokeWidth="0dp"
                         app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
                         android:visibility="gone">
 
@@ -168,6 +181,7 @@
                                 android:id="@+id/mediaOverlayContainer"
                                 android:layout_width="match_parent"
                                 android:layout_height="match_parent"
+                                android:background="#66000000"
                                 android:visibility="gone">
 
                                 <LinearLayout
@@ -181,9 +195,9 @@
                                     android:paddingVertical="12dp">
 
                                     <ImageView
-                                        android:layout_width="32dp"
-                                        android:layout_height="32dp"
-                                        android:src="@drawable/ic_download"
+                                        android:layout_width="36dp"
+                                        android:layout_height="36dp"
+                                        android:src="@drawable/ic_cloud_download"
                                         app:tint="@android:color/white" />
 
                                     <TextView
@@ -192,6 +206,7 @@
                                         android:layout_height="wrap_content"
                                         android:textColor="@android:color/white"
                                         android:textSize="12sp"
+                                        android:textStyle="bold"
                                         android:layout_marginTop="6dp"/>
                                 </LinearLayout>
                             </FrameLayout>
@@ -207,6 +222,7 @@
                         android:layout_marginBottom="4dp"
                         app:cardCornerRadius="12dp"
                         app:cardElevation="0dp"
+                        app:strokeWidth="0dp"
                         app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
                         android:visibility="gone">
                         <LinearLayout
@@ -257,6 +273,15 @@
                         android:textColorLink="?attr/colorPrimary"
                         android:textIsSelectable="true"
                         android:textSize="16sp" />
+
+                    <LinearLayout
+                        android:id="@+id/inlineKeyboardContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginHorizontal="8dp"
+                        android:layout_marginTop="4dp"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/messageInfo"

@@ -19,6 +19,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -65,6 +66,7 @@ class MessageAdapter(
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val dateHeader: TextView = view.findViewById(R.id.dateHeader)
         val systemMessageText: TextView = view.findViewById(R.id.systemMessageText)
+        val systemReactionsContainer: LinearLayout = view.findViewById(R.id.systemReactionsContainer)
         val mainMessageContainer: LinearLayout = view.findViewById(R.id.mainMessageContainer)
         val avatar: ImageView = view.findViewById(R.id.avatar)
         val avatarFallback: TextView = view.findViewById(R.id.avatarFallback)
@@ -84,6 +86,7 @@ class MessageAdapter(
         val fileContainer: MaterialCardView = view.findViewById(R.id.fileContainer)
         val fileNameText: TextView = view.findViewById(R.id.fileNameText)
         val fileSizeText: TextView = view.findViewById(R.id.fileSizeText)
+        val inlineKeyboardContainer: LinearLayout = view.findViewById(R.id.inlineKeyboardContainer)
         val reactionsContainer: LinearLayout = view.findViewById(R.id.reactionsContainer)
         
         var boundMessageId: Long = 0L
@@ -102,33 +105,56 @@ class MessageAdapter(
         holder.boundMessageId = currentMsgId
         val ctx = holder.itemView.context
 
-        // 1. 日期渲染：跨年显示年月日，当年显示月日
+        // 1. 日期处理
         val currentDate = Date(message.date * 1000)
         val cal = Calendar.getInstance().apply { time = currentDate }
         val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-        val dateDf = if (cal.get(Calendar.YEAR) == currentYear) {
-            SimpleDateFormat("M月d日", Locale.getDefault())
-        } else {
-            SimpleDateFormat("yy年M月d日", Locale.getDefault())
-        }
+        val dateDf = if (cal.get(Calendar.YEAR) == currentYear) SimpleDateFormat("M月d日", Locale.getDefault()) else SimpleDateFormat("yy年M月d日", Locale.getDefault())
         val dateString = dateDf.format(currentDate)
         
         var showDateHeader = true
         if (position > 0) {
-            val prevMessage = getItem(position - 1)
-            val prevDateString = dateDf.format(Date(prevMessage.date * 1000))
+            val prevDateString = dateDf.format(Date(getItem(position - 1).date * 1000))
             if (dateString == prevDateString) showDateHeader = false
         }
-        
-        if (showDateHeader) {
-            holder.dateHeader.visibility = View.VISIBLE
-            holder.dateHeader.text = dateString
-        } else {
-            holder.dateHeader.visibility = View.GONE
-        }
+        holder.dateHeader.visibility = if (showDateHeader) View.VISIBLE else View.GONE
+        if (showDateHeader) holder.dateHeader.text = dateString
 
         val rawObj = try { JSONObject(message.rawJson ?: "{}") } catch (e: Exception) { JSONObject() }
         
+        // 渲染表情回应的闭包复用
+        val renderReactions = { container: LinearLayout, alignCenter: Boolean ->
+            container.removeAllViews()
+            if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
+                try {
+                    val arr = JSONArray(message.reactions)
+                    if (arr.length() > 0) {
+                        container.visibility = View.VISIBLE
+                        for (i in 0 until arr.length()) {
+                            val r = arr.getJSONObject(i)
+                            val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") r.getJSONObject("type").optString("emoji", "❓") else r.optString("emoji", "❓")
+                            val count = if (r.has("total_count")) r.getInt("total_count") else r.optInt("count", 1)
+                            val isChosen = r.optBoolean("chosen", false)
+                            
+                            val tv = TextView(ctx).apply {
+                                text = "$emojiStr $count"
+                                textSize = 12f
+                                val bgAttr = if (isChosen) com.google.android.material.R.attr.colorPrimaryContainer else com.google.android.material.R.attr.colorSurfaceVariant
+                                val textAttr = if (isChosen) com.google.android.material.R.attr.colorOnPrimaryContainer else com.google.android.material.R.attr.colorOnSurfaceVariant
+                                setTextColor(ctx.getColorAttr(textAttr))
+                                background = GradientDrawable().apply { setColor(ctx.getColorAttr(bgAttr)); cornerRadius = 32f; if (isChosen) setStroke(2, ctx.getColorAttr(com.google.android.material.R.attr.colorPrimary)) }
+                                setPadding(16, 6, 16, 6)
+                                layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 8; marginStart = if (alignCenter && i == 0) 8 else 0 }
+                                setOnClickListener { onReactionToggle?.invoke(message, emojiStr) }
+                            }
+                            container.addView(tv)
+                        }
+                    } else container.visibility = View.GONE
+                } catch (e: Exception) { container.visibility = View.GONE }
+            } else container.visibility = View.GONE
+        }
+
+        // 7. 系统消息也能渲染表情
         if (rawObj.has("new_chat_members") || rawObj.has("left_chat_member") || rawObj.has("pinned_message") || rawObj.has("new_chat_title")) {
             holder.mainMessageContainer.visibility = View.GONE
             holder.systemMessageText.visibility = View.VISIBLE
@@ -147,13 +173,14 @@ class MessageAdapter(
             } else if (rawObj.has("new_chat_title")) { sysTxt = "$doer 修改了名称" }
             holder.systemMessageText.text = sysTxt
             
-            holder.systemMessageText.setOnLongClickListener { v -> onLongClick?.invoke(message, v) ?: false }
-            holder.systemMessageText.setOnClickListener { onAvatarClick?.invoke(message) }
+            holder.systemMessageText.setOnClickListener { onClick?.invoke(message, holder.systemMessageText) } // 单击出菜单
+            renderReactions(holder.systemReactionsContainer, true)
             return
         }
 
         holder.mainMessageContainer.visibility = View.VISIBLE
         holder.systemMessageText.visibility = View.GONE
+        holder.systemReactionsContainer.visibility = View.GONE
         Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(null).target(holder.mediaImage).build())
 
         val typedValue = TypedValue()
@@ -183,7 +210,7 @@ class MessageAdapter(
             holder.avatarFallback.setOnLongClickListener(longClickAvatar)
         }
 
-        // 2. 名字提取与管理员标签渲染 (绿色)
+        // 12. 姓名与管理员标签
         val fromObj = rawObj.optJSONObject("from")
         val fNameStr = fromObj?.optString("first_name", "") ?: ""
         val lNameStr = fromObj?.optString("last_name", "") ?: ""
@@ -218,41 +245,28 @@ class MessageAdapter(
         holder.mediaContainer.visibility = View.GONE
         holder.fileContainer.visibility = View.GONE
         
-        val prefs = ctx.getSharedPreferences("botgram_prefs", Context.MODE_PRIVATE)
         val fileCachePrefs = ctx.getSharedPreferences("botgram_file_cache", Context.MODE_PRIVATE)
-        val token = prefs.getString("bot_token", "") ?: ""
         var actualText = message.text ?: ""; var mediaLabel = ""
 
         if (rawObj.has("photo") || rawObj.has("sticker") || rawObj.has("video")) {
             holder.mediaContainer.visibility = View.VISIBLE
-            var fileId = ""; var fileSize = 0L; var autoCache = false; var isVideo = false
+            var fileSize = 0L; var autoCache = false; var isVideo = false
             if (rawObj.has("photo")) {
-                actualText = rawObj.optString("caption", ""); mediaLabel = "[图片] "
-                val arr = rawObj.getJSONArray("photo"); val photoObj = arr.getJSONObject(arr.length() - 1)
-                fileId = photoObj.getString("file_id"); fileSize = photoObj.optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_image", false)
+                actualText = rawObj.optString("caption", actualText); mediaLabel = "[图片] "
+                val arr = rawObj.getJSONArray("photo"); fileSize = arr.getJSONObject(arr.length() - 1).optLong("file_size", 0L)
             } else if (rawObj.has("sticker")) {
                 actualText = ""
                 val emoji = rawObj.getJSONObject("sticker").optString("emoji", "")
                 mediaLabel = if (emoji.isNotEmpty()) "[贴纸 $emoji] " else "[贴纸] "
-                fileId = rawObj.getJSONObject("sticker").getString("file_id"); fileSize = rawObj.getJSONObject("sticker").optLong("file_size", 0L); autoCache = prefs.getBoolean("auto_sticker", false)
+                fileSize = rawObj.getJSONObject("sticker").optLong("file_size", 0L)
             } else if (rawObj.has("video")) {
-                actualText = rawObj.optString("caption", ""); mediaLabel = "[视频] "; val vid = rawObj.getJSONObject("video")
-                fileId = vid.optJSONObject("thumbnail")?.optString("file_id") ?: vid.getString("file_id")
-                fileSize = vid.optLong("file_size", 0L); isVideo = true; autoCache = false 
+                actualText = rawObj.optString("caption", actualText); mediaLabel = "[视频] "
+                fileSize = rawObj.getJSONObject("video").optLong("file_size", 0L); isVideo = true
             }
 
             val savedPath = fileCachePrefs.getString(currentMsgId.toString(), null)
-            val loadMediaFn = {
-                holder.mediaOverlayContainer.visibility = View.GONE
-                scope.launch {
-                    val url = FileHelper.getTelegramFileUrl(fileId, token)
-                    if (holder.boundMessageId == currentMsgId && !url.isNullOrEmpty()) {
-                        Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(url).target(holder.mediaImage).crossfade(true).build())
-                    }
-                }
-            }
-
-            // 缓存与未缓存的不同展示状态
+            
+            // 8. 缓存 UI 完善
             if (savedPath != null && File(savedPath).exists()) {
                 holder.mediaOverlayContainer.visibility = View.GONE
                 Coil.imageLoader(ctx).enqueue(ImageRequest.Builder(ctx).data(File(savedPath)).target(holder.mediaImage).crossfade(true).build())
@@ -260,13 +274,9 @@ class MessageAdapter(
                 holder.mediaImage.setImageDrawable(null)
                 holder.mediaOverlayText.text = formatSize(fileSize)
                 holder.mediaOverlayContainer.visibility = View.VISIBLE
-                if (autoCache) {
-                    holder.mediaOverlayContainer.visibility = View.GONE
-                    onFileClick?.invoke(message) // 让它直接排进后台下载列队
-                }
             }
 
-            // 独立拦截点击事件，决不与气泡长按冲突
+            // 6. 边缘点击弹菜单，图标点击下载或全屏
             holder.mediaOverlayContainer.setOnClickListener { onFileClick?.invoke(message) }
             holder.mediaImage.setOnClickListener {
                 val currentPath = fileCachePrefs.getString(currentMsgId.toString(), null)
@@ -276,10 +286,9 @@ class MessageAdapter(
                     } else onPhotoPreview?.invoke(currentPath)
                 } else onFileClick?.invoke(message)
             }
-            holder.mediaImage.setOnLongClickListener { onLongClick?.invoke(message, holder.bubbleContainer) ?: false }
         } else if (rawObj.has("document") || rawObj.has("audio") || rawObj.has("voice")) {
             val isAudio = rawObj.has("audio") || rawObj.has("voice")
-            actualText = rawObj.optString("caption", ""); mediaLabel = if (isAudio) "[音频] " else "[文件] "
+            actualText = rawObj.optString("caption", actualText); mediaLabel = if (isAudio) "[音频] " else "[文件] "
             holder.fileContainer.visibility = View.VISIBLE
             val doc = if (isAudio) (if (rawObj.has("audio")) rawObj.getJSONObject("audio") else rawObj.getJSONObject("voice")) else rawObj.getJSONObject("document")
             holder.fileNameText.text = doc.optString("file_name", if (isAudio) "音频消息" else "未知文件")
@@ -287,7 +296,7 @@ class MessageAdapter(
             holder.fileContainer.setOnClickListener { onFileClick?.invoke(message) }
         }
 
-        // 3. 多层文本重叠格式修复与链接弹窗拦截
+        // 10. 文本格式，不分发收件全应用
         if (actualText.isEmpty() && !message.isDeleted) holder.messageText.visibility = View.GONE
         else {
             holder.messageText.visibility = View.VISIBLE
@@ -298,7 +307,7 @@ class MessageAdapter(
                 builder.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             
-            // 剥离并重建带有安全提示框的超级链接
+            // 3. 安全的超链接弹窗
             val urlSpans = builder.getSpans(0, builder.length, URLSpan::class.java)
             for (urlSpan in urlSpans) {
                 val start = builder.getSpanStart(urlSpan); val end = builder.getSpanEnd(urlSpan); val flags = builder.getSpanFlags(urlSpan)
@@ -306,9 +315,9 @@ class MessageAdapter(
                 builder.setSpan(object : ClickableSpan() {
                     override fun onClick(w: View) { 
                         MaterialAlertDialogBuilder(ctx)
-                            .setTitle("外部链接提示")
-                            .setMessage("即将访问：\n\n${urlSpan.url}")
-                            .setPositiveButton("继续") { _, _ -> try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) } catch(e:Exception){} }
+                            .setTitle("安全提示")
+                            .setMessage("即将访问链接：\n\n${urlSpan.url}")
+                            .setPositiveButton("继续访问") { _, _ -> try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(urlSpan.url))) } catch(e:Exception){} }
                             .setNegativeButton("取消", null)
                             .show() 
                     }
@@ -322,7 +331,6 @@ class MessageAdapter(
             }
             holder.messageText.text = builder
             
-            // 彻底解决文字点击、链接点击、长按菜单之间的冲突
             holder.messageText.movementMethod = object : LinkMovementMethod() {
                 override fun onTouchEvent(widget: TextView, buffer: Spannable, event: MotionEvent): Boolean {
                     val action = event.action
@@ -341,44 +349,37 @@ class MessageAdapter(
                     return super.onTouchEvent(widget, buffer, event)
                 }
             }
+            
+            // 9. 单击直接呼出菜单
             holder.messageText.setOnClickListener { onClick?.invoke(message, holder.bubbleContainer) }
-            holder.messageText.setOnLongClickListener { onLongClick?.invoke(message, holder.bubbleContainer) ?: false }
         }
 
-        // 4. 表情回应处理
-        holder.reactionsContainer.removeAllViews()
-        if (!message.reactions.isNullOrEmpty() && message.reactions != "[]") {
-            try {
-                val arr = JSONArray(message.reactions)
-                if (arr.length() > 0) {
-                    holder.reactionsContainer.visibility = View.VISIBLE
-                    for (i in 0 until arr.length()) {
-                        val r = arr.getJSONObject(i)
-                        val emojiStr = if (r.has("type") && r.optJSONObject("type")?.optString("type") == "emoji") r.getJSONObject("type").optString("emoji", "❓") else r.optString("emoji", "❓")
-                        val count = if (r.has("total_count")) r.getInt("total_count") else r.optInt("count", 1)
-                        val isChosen = r.optBoolean("chosen", false)
-                        
-                        val tv = TextView(ctx).apply {
-                            text = "$emojiStr $count"
-                            textSize = 12f
-                            val bgAttr = if (isChosen) com.google.android.material.R.attr.colorPrimaryContainer else com.google.android.material.R.attr.colorSurfaceVariant
-                            val textAttr = if (isChosen) com.google.android.material.R.attr.colorOnPrimaryContainer else com.google.android.material.R.attr.colorOnSurfaceVariant
-                            setTextColor(ctx.getColorAttr(textAttr))
-                            background = GradientDrawable().apply { 
-                                setColor(ctx.getColorAttr(bgAttr))
-                                cornerRadius = 32f
-                                if (isChosen) setStroke(2, ctx.getColorAttr(com.google.android.material.R.attr.colorPrimary))
-                            }
-                            setPadding(16, 6, 16, 6); layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = 12 }
-                            setOnClickListener { onReactionToggle?.invoke(message, emojiStr) }
+        // 13. 内联键盘支持
+        holder.inlineKeyboardContainer.removeAllViews()
+        if (rawObj.has("reply_markup")) {
+            val markup = rawObj.getJSONObject("reply_markup")
+            if (markup.has("inline_keyboard")) {
+                holder.inlineKeyboardContainer.visibility = View.VISIBLE
+                val keyboard = markup.getJSONArray("inline_keyboard")
+                for (i in 0 until keyboard.length()) {
+                    val rowArray = keyboard.getJSONArray(i)
+                    val rowLayout = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
+                    for (j in 0 until rowArray.length()) {
+                        val btnObj = rowArray.getJSONObject(j)
+                        val btn = Button(ctx).apply { 
+                            text = btnObj.optString("text", "Button")
+                            layoutParams = LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(4, 4, 4, 4) }
+                            setOnClickListener { Toast.makeText(ctx, "Botgram API 交互施工中...", Toast.LENGTH_SHORT).show() }
                         }
-                        holder.reactionsContainer.addView(tv)
+                        rowLayout.addView(btn)
                     }
-                } else holder.reactionsContainer.visibility = View.GONE
-            } catch (e: Exception) { holder.reactionsContainer.visibility = View.GONE }
-        } else holder.reactionsContainer.visibility = View.GONE
+                    holder.inlineKeyboardContainer.addView(rowLayout)
+                }
+            } else holder.inlineKeyboardContainer.visibility = View.GONE
+        } else holder.inlineKeyboardContainer.visibility = View.GONE
 
-        // 5. 消息卡片底角精确到秒的时间展示
+        renderReactions(holder.reactionsContainer, false)
+
         val timeDf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val timeString = timeDf.format(currentDate)
         val editStr = if (message.isEdited) " [已编辑]" else ""
@@ -398,7 +399,7 @@ class MessageAdapter(
         }
         
         holder.bubbleContainer.setOnClickListener { onClick?.invoke(message, holder.bubbleContainer) }
-        holder.bubbleContainer.setOnLongClickListener { onLongClick?.invoke(message, holder.bubbleContainer) ?: false }
+        holder.mainMessageContainer.setOnClickListener { onClick?.invoke(message, holder.bubbleContainer) }
     }
     
     private fun Context.getColorAttr(attr: Int): Int { val tv = TypedValue(); theme.resolveAttribute(attr, tv, true); return tv.data }
