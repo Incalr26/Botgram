@@ -43,30 +43,32 @@ fun ChatBubble(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = {
-                        isSelectionActive = true
-                    },
-                    onTap = {
-                        if (isSelectionActive) {
-                            isSelectionActive = false
-                            focusManager.clearFocus()
-                        } else {
-                            onMenuOpen()
-                        }
-                    }
-                )
-            },
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            modifier = Modifier.widthIn(max = 300.dp)
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .pointerInput(isSelectionActive) {
+                    detectTapGestures(
+                        onLongPress = {
+                            isSelectionActive = true
+                            onMenuOpen()
+                        },
+                        onTap = {
+                            if (isSelectionActive) {
+                                isSelectionActive = false
+                                focusManager.clearFocus()
+                            } else {
+                                onMenuOpen()
+                            }
+                        }
+                    )
+                }
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 4.dp)
@@ -77,28 +79,40 @@ fun ChatBubble(
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 14.sp
                     )
-                    
-                    Spacer(modifier = Modifier.width(4.dp))
-                    
+
                     if (isOwner) {
-                        IdentityTag(text = "所有者", backgroundColor = MaterialTheme.colorScheme.tertiary)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IdentityTag(
+                            text = "所有者",
+                            backgroundColor = MaterialTheme.colorScheme.tertiary,
+                            textColor = MaterialTheme.colorScheme.onTertiary
+                        )
                     } else if (isAdmin) {
-                        IdentityTag(text = "管理员", backgroundColor = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IdentityTag(
+                            text = "管理员",
+                            backgroundColor = MaterialTheme.colorScheme.secondary,
+                            textColor = MaterialTheme.colorScheme.onSecondary
+                        )
                     }
-                    
+
                     if (!customTag.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IdentityTag(text = customTag, backgroundColor = MaterialTheme.colorScheme.surfaceVariant, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IdentityTag(
+                            text = customTag,
+                            backgroundColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            textColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
-                if (quotedMessage != null) {
+                if (!quotedMessage.isNullOrEmpty()) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 4.dp)
+                            .padding(bottom = 6.dp)
                     ) {
                         Text(
                             text = quotedMessage,
@@ -119,13 +133,29 @@ fun ChatBubble(
                         Text(
                             text = messageText,
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.pointerInput(isSelectionActive) {
+                                detectTapGestures(
+                                    onTap = {
+                                        if (isSelectionActive) {
+                                            isSelectionActive = false
+                                            focusManager.clearFocus()
+                                        } else {
+                                            onMenuOpen()
+                                        }
+                                    },
+                                    onLongPress = {
+                                        isSelectionActive = true
+                                        onMenuOpen()
+                                    }
+                                )
+                            }
                         )
                     }
                 }
 
                 if (reactions.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     ReactionRow(reactions = reactions, onToggle = onReactionToggle)
                 }
             }
@@ -137,16 +167,16 @@ fun ChatBubble(
 fun IdentityTag(
     text: String,
     backgroundColor: Color,
-    textColor: Color = MaterialTheme.colorScheme.onPrimary
+    textColor: Color
 ) {
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(4.dp),
-        modifier = Modifier.padding(end = 4.dp)
+        shape = RoundedCornerShape(4.dp)
     ) {
         Text(
             text = text,
             fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
             color = textColor,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         )
@@ -155,23 +185,26 @@ fun IdentityTag(
 
 @Composable
 fun PlaceholderBox(sizeText: String, onClick: () -> Unit) {
-    Box(
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp)
+        ) {
             Icon(
                 imageVector = Icons.Default.CloudDownload,
-                contentDescription = null,
+                contentDescription = "预览下载",
                 modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = sizeText,
                 fontSize = 12.sp,
@@ -185,7 +218,7 @@ fun PlaceholderBox(sizeText: String, onClick: () -> Unit) {
 fun ReactionRow(reactions: List<MessageReaction>, onToggle: (String) -> Unit) {
     val groupedReactions = reactions.groupBy { it.emoji }
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         groupedReactions.forEach { (emoji, list) ->
@@ -195,14 +228,15 @@ fun ReactionRow(reactions: List<MessageReaction>, onToggle: (String) -> Unit) {
                 modifier = Modifier.clickable { onToggle(emoji) }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = emoji, fontSize = 12.sp)
+                    Text(text = emoji, fontSize = 13.sp)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = list.size.toString(),
                         fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }

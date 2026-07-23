@@ -91,7 +91,7 @@ jobs:
         run: |
           APK_PATH="app/build/outputs/apk/release/${APK_NAME}"
           # 使用 printf 构建 caption，\n 会被解释为换行符，避免 YAML 多行字符串问题
-          printf -v CAPTION "版本: ${VERSION}\n提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>\n<blockquote>${COMMIT_MSG}</blockquote>\n触发者: ${ACTOR}\n下载: <a href=\"https://t.me/Botgram_Channel/84\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
+          printf -v CAPTION "版本: ${VERSION}\n提交: <a href=\"https://github.com/${{ github.repository }}/commit/${SHORT_SHA}\">${SHORT_SHA}</a>\n<blockquote>${COMMIT_MSG}</blockquote>\n触发者: ${ACTOR}\n下载: <a href=\"https://t.me/Botgram_Channel/85\">Botgram_Channel</a> | <a href=\"${RELEASE_URL}\">Github</a>"
           RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument" \
             -F "chat_id=${CHAT_ID}" \
             -F "document=@${APK_PATH}" \
