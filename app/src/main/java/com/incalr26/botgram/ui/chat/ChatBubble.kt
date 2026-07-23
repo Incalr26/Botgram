@@ -67,7 +67,6 @@ fun ChatBubble(
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Column(modifier = Modifier.padding(8.dp)) {
-                // 姓名与身份标签
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 4.dp)
@@ -93,7 +92,6 @@ fun ChatBubble(
                     }
                 }
 
-                // 引用消息区域
                 if (quotedMessage != null) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -111,7 +109,6 @@ fun ChatBubble(
                     }
                 }
 
-                // 占位气泡或文本内容
                 if (isPlaceholder) {
                     PlaceholderBox(
                         sizeText = placeholderSizeText,
@@ -127,7 +124,6 @@ fun ChatBubble(
                     }
                 }
 
-                // 表情回应区域
                 if (reactions.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     ReactionRow(reactions = reactions, onToggle = onReactionToggle)
@@ -163,7 +159,7 @@ fun PlaceholderBox(sizeText: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceDim)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick() }
             .padding(16.dp),
         contentAlignment = Alignment.Center
@@ -172,7 +168,7 @@ fun PlaceholderBox(sizeText: String, onClick: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.CloudDownload,
                 contentDescription = null,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(4.dp))

@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,11 +40,7 @@ fun ChatDetailScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    if (isAvatarExpanded) {
-                        Text(text = chatName, color = MaterialTheme.colorScheme.onSurface)
-                    } else {
-                        Text(text = chatName, color = MaterialTheme.colorScheme.onSurface)
-                    }
+                    Text(text = chatName, color = MaterialTheme.colorScheme.onSurface)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -64,17 +59,16 @@ fun ChatDetailScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 头像区域
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = if (isAvatarExpanded) 24.dp else 8.dp)
+                    .padding(top = if (isAvatarExpanded) 36.dp else 12.dp)
                     .clickable { isAvatarExpanded = !isAvatarExpanded }
                     .pointerInput(isAvatarExpanded) {
                         if (isAvatarExpanded) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
-                                if (dragAmount.y > 50f) {
+                                if (dragAmount.y > 40f) {
                                     onSharedPreviewOpen()
                                 }
                             }
@@ -84,7 +78,7 @@ fun ChatDetailScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(if (isAvatarExpanded) 200.dp else 80.dp)
+                        .size(if (isAvatarExpanded) 180.dp else 72.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer)
                 )
@@ -92,12 +86,11 @@ fun ChatDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 详情列表区域
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(5) { index ->
                     ListItem(
                         headlineContent = { Text("设置项 $index", color = MaterialTheme.colorScheme.onSurface) },
-                        modifier = Modifier.clickable { /* 点击波纹效果 */ },
+                        modifier = Modifier.clickable { },
                         colors = ListItemDefaults.colors(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
