@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -195,11 +195,11 @@ fun PlaceholderBox(sizeText: String, onClick: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.CloudDownload,
+                imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "预览下载",
                 modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.primary
